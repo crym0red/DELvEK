@@ -15,7 +15,11 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+          lfs: true
 
+      # ---------------------------------------------------------
+      # LiteHook
+      # ---------------------------------------------------------
       - name: Prepare litehook source
         shell: bash
         run: |
@@ -23,37 +27,167 @@ jobs:
 
           LITEHOOK_DIR="$GITHUB_WORKSPACE/litehook"
           LITEHOOK_SOURCE="$LITEHOOK_DIR/src/litehook.c"
+          LITEHOOK_HEADER="$LITEHOOK_DIR/src/litehook.h"
           LITEHOOK_COMMIT="a7e9f599d7f0b3d77008ad62bf10cb10dab6eca9"
 
-          if [ ! -f "$LITEHOOK_SOURCE" ]; then
-            echo "litehook/src/litehook.c is missing; restoring litehook commit $LITEHOOK_COMMIT."
+          if [ ! -f "$LITEHOOK_SOURCE" ] || [ ! -f "$LITEHOOK_HEADER" ]; then
+            echo "litehook source is missing."
+            echo "Restoring LiteHook commit:"
+            echo "$LITEHOOK_COMMIT"
+
             rm -rf "$LITEHOOK_DIR"
-            git clone --no-checkout https://github.com/LiveContainer/litehook.git "$LITEHOOK_DIR"
+
+            git clone \
+              --no-checkout \
+              https://github.com/LiveContainer/litehook.git \
+              "$LITEHOOK_DIR"
+
             git -C "$LITEHOOK_DIR" checkout --detach "$LITEHOOK_COMMIT"
           fi
 
           if [ ! -f "$LITEHOOK_SOURCE" ]; then
-            echo "::error::litehook/src/litehook.c is still missing."
-            find "$LITEHOOK_DIR" -maxdepth 3 -print | head -200
+            echo "::error::Missing litehook/src/litehook.c"
+            find "$LITEHOOK_DIR" -maxdepth 3 -print || true
             exit 1
           fi
 
-          echo "litehook source verified: $LITEHOOK_SOURCE"
+          if [ ! -f "$LITEHOOK_HEADER" ]; then
+            echo "::error::Missing litehook/src/litehook.h"
+            find "$LITEHOOK_DIR" -maxdepth 3 -print || true
+            exit 1
+          fi
+
+          echo "LiteHook source:"
+          echo "$LITEHOOK_SOURCE"
+
+          echo "LiteHook header:"
+          echo "$LITEHOOK_HEADER"
+
+          echo "LiteHook revision:"
           git -C "$LITEHOOK_DIR" rev-parse HEAD
 
+      # ---------------------------------------------------------
+      # OpenSSL XCFramework
+      # ---------------------------------------------------------
+      - name: Prepare OpenSSL XCFramework
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          OPENSSL_DIR="$GITHUB_WORKSPACE/OpenSSL"
+          FRAMEWORK_DIR="$OPENSSL_DIR/Frameworks"
+          FRAMEWORK="$FRAMEWORK_DIR/OpenSSL.xcframework"
+
+          # Pinned OpenSSL repository revision known to contain
+          # the expected XCFramework layout.
+          OPENSSL_REPOSITORY="https://github.com/krzyzanowskim/OpenSSL.git"
+          OPENSSL_COMMIT="623c84da314e85363236507ca38a4bde65df21c3"
+
+          if [ -f "$FRAMEWORK/Info.plist" ]; then
+            echo "Using existing OpenSSL XCFramework:"
+            echo "$FRAMEWORK"
+            exit 0
+          fi
+
+          echo "OpenSSL XCFramework is missing."
+          echo "Restoring pinned OpenSSL revision:"
+          echo "$OPENSSL_COMMIT"
+
+          rm -rf "$OPENSSL_DIR"
+
+          git clone \
+            --no-checkout \
+            "$OPENSSL_REPOSITORY" \
+            "$OPENSSL_DIR"
+
+          git -C "$OPENSSL_DIR" checkout --detach "$OPENSSL_COMMIT"
+
+          if [ ! -f "$FRAMEWORK/Info.plist" ]; then
+            echo "::error::OpenSSL.xcframework was not found at:"
+            echo "$FRAMEWORK"
+
+            echo "OpenSSL repository contents:"
+            find "$OPENSSL_DIR" \
+              -maxdepth 4 \
+              -print | head -300 || true
+
+            exit 1
+          fi
+
+          echo "OpenSSL XCFramework prepared:"
+          echo "$FRAMEWORK"
+
+          echo "OpenSSL revision:"
+          git -C "$OPENSSL_DIR" rev-parse HEAD
+
+      # ---------------------------------------------------------
+      # Validate native dependencies before Xcode
+      # ---------------------------------------------------------
+      - name: Verify native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Checking LiteHook..."
+
+          test -f "$GITHUB_WORKSPACE/litehook/src/litehook.c"
+          test -f "$GITHUB_WORKSPACE/litehook/src/litehook.h"
+
+          echo "LiteHook OK"
+
+          echo
+          echo "Checking OpenSSL..."
+
+          test -f \
+            "$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework/Info.plist"
+
+          echo "OpenSSL XCFramework OK"
+
+          echo
+          echo "Native dependency layout:"
+          echo
+
+          ls -la "$GITHUB_WORKSPACE/litehook/src/"
+          echo
+          ls -la "$GITHUB_WORKSPACE/OpenSSL/Frameworks/"
+          echo
+          ls -la "$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework/"
+
+      # ---------------------------------------------------------
+      # Xcode
+      # ---------------------------------------------------------
       - name: Select Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: "26.6.0"
 
-      - name: Resolve Swift packages
+      - name: Show Xcode information
+        shell: bash
         run: |
           set -euo pipefail
 
-          xcodebuild -resolvePackageDependencies \
+          xcodebuild -version
+
+          echo
+          echo "Installed SDKs:"
+          xcodebuild -showsdks
+
+      # ---------------------------------------------------------
+      # Swift packages
+      # ---------------------------------------------------------
+      - name: Resolve Swift packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          xcodebuild \
+            -resolvePackageDependencies \
             -project "LiveContainer.xcodeproj" \
             -scheme "LiveContainer"
 
+      # ---------------------------------------------------------
+      # Build
+      # ---------------------------------------------------------
       - name: Build unsigned DELvEK
         shell: bash
         run: |
@@ -74,6 +208,9 @@ jobs:
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee build/xcodebuild.log
 
+      # ---------------------------------------------------------
+      # Always upload build diagnostics
+      # ---------------------------------------------------------
       - name: Upload Xcode build log
         if: always()
         uses: actions/upload-artifact@v4
@@ -82,61 +219,113 @@ jobs:
           path: build/xcodebuild.log
           if-no-files-found: warn
 
+      # ---------------------------------------------------------
+      # Package IPA
+      # ---------------------------------------------------------
       - name: Package unsigned IPA
+        shell: bash
         run: |
           set -euo pipefail
 
           APP="$PWD/build/DerivedData/Build/Products/Release-iphoneos/DELvEK.app"
 
           if [ ! -d "$APP" ]; then
-            echo "DELvEK.app was not produced. Available products:"
-            find "$PWD/build/DerivedData/Build/Products" \
-              -maxdepth 2 \
+            echo "DELvEK.app was not produced."
+
+            echo
+            echo "Available products:"
+
+            find \
+              "$PWD/build/DerivedData/Build/Products" \
+              -maxdepth 3 \
               -type d \
               -name '*.app' \
               -print || true
+
             exit 1
           fi
 
           rm -rf build/Payload
+          rm -rf build/verify
+
           mkdir -p build/Payload
 
-          cp -R "$APP" build/Payload/DELvEK.app
+          cp -R \
+            "$APP" \
+            "build/Payload/DELvEK.app"
 
           rm -f build/DELvEK-unsigned.ipa
 
           cd build
-          zip -qry DELvEK-unsigned.ipa Payload
+
+          zip -qry \
+            DELvEK-unsigned.ipa \
+            Payload
 
           rm -rf Payload
 
+          echo "Created:"
+          ls -lh DELvEK-unsigned.ipa
+
+      # ---------------------------------------------------------
+      # Verify unsigned artifact
+      # ---------------------------------------------------------
       - name: Verify artifact is unsigned
+        shell: bash
         run: |
           set -euo pipefail
 
-          unzip -q build/DELvEK-unsigned.ipa -d build/verify
+          rm -rf build/verify
+
+          unzip -q \
+            build/DELvEK-unsigned.ipa \
+            -d build/verify
 
           APP="build/verify/Payload/DELvEK.app"
 
-          echo "Bundle:"
+          if [ ! -d "$APP" ]; then
+            echo "::error::Packaged DELvEK.app was not found."
+            exit 1
+          fi
+
+          echo "========================================"
+          echo "Bundle identifier"
+          echo "========================================"
+
           /usr/libexec/PlistBuddy \
             -c 'Print :CFBundleIdentifier' \
             "$APP/Info.plist"
 
-          echo "Display name:"
+          echo
+          echo "========================================"
+          echo "Display name"
+          echo "========================================"
+
           /usr/libexec/PlistBuddy \
             -c 'Print :CFBundleDisplayName' \
             "$APP/Info.plist" || true
 
-          echo "Code signature directories:"
-          find "$APP" \
+          echo
+          echo "========================================"
+          echo "Code signature directories"
+          echo "========================================"
+
+          find \
+            "$APP" \
             -type d \
             -name '_CodeSignature' \
-            -print
+            -print || true
 
-          echo "Code signatures:"
+          echo
+          echo "========================================"
+          echo "Code signature"
+          echo "========================================"
+
           codesign -dvv "$APP" 2>&1 || true
 
+      # ---------------------------------------------------------
+      # Upload IPA
+      # ---------------------------------------------------------
       - name: Upload unsigned DELvEK artifact
         uses: actions/upload-artifact@v4
         with:
