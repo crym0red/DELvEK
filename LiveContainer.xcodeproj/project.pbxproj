@@ -105,7 +105,7 @@
 /* Begin PBXCopyFilesBuildPhase section */
 		17413FC12D9C0BAE00F3F928 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 8;
+			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
@@ -118,7 +118,7 @@
 				174140942D9C0E8200F3F928 /* ZSign.dylib in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 1;
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		17554B762DA169AA004C6D90 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
