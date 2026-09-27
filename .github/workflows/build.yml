@@ -59,9 +59,13 @@ jobs:
             -scheme "LiveContainer"
 
       - name: Build unsigned DELvEK
+        shell: bash
         run: |
           set -o pipefail
+
           rm -rf build/DerivedData
+          mkdir -p build
+
           xcodebuild build \
             -project "LiveContainer.xcodeproj" \
             -scheme "LiveContainer" \
@@ -72,7 +76,15 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
-          | xcpretty
+            2>&1 | tee build/xcodebuild.log
+
+      - name: Upload Xcode build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build/xcodebuild.log
+          if-no-files-found: warn
 
       - name: Package unsigned IPA
         run: |
