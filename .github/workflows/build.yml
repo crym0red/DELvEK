@@ -33,7 +33,7 @@ jobs:
           fi
 
           if [ ! -f "$LITEHOOK_SOURCE" ]; then
-            echo "::error::litehook/src/litehook.c is still missing after restoring litehook commit $LITEHOOK_COMMIT."
+            echo "::error::litehook/src/litehook.c is still missing."
             find "$LITEHOOK_DIR" -maxdepth 3 -print | head -200
             exit 1
           fi
@@ -48,55 +48,92 @@ jobs:
 
       - name: Resolve Swift packages
         run: |
+          set -euo pipefail
+
           xcodebuild -resolvePackageDependencies \
             -project "LiveContainer.xcodeproj" \
             -scheme "LiveContainer"
 
       - name: Build unsigned DELvEK
+        shell: bash
         run: |
           set -o pipefail
+
           rm -rf build/DerivedData
+          mkdir -p build
+
           xcodebuild build \
             -project "LiveContainer.xcodeproj" \
             -scheme "LiveContainer" \
             -configuration Release \
-            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
             -derivedDataPath "$PWD/build/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
-          | xcpretty
+            2>&1 | tee build/xcodebuild.log
+
+      - name: Upload Xcode build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build/xcodebuild.log
+          if-no-files-found: warn
 
       - name: Package unsigned IPA
         run: |
           set -euo pipefail
+
           APP="$PWD/build/DerivedData/Build/Products/Release-iphoneos/DELvEK.app"
+
           if [ ! -d "$APP" ]; then
             echo "DELvEK.app was not produced. Available products:"
-            find "$PWD/build/DerivedData/Build/Products" -maxdepth 2 -type d -name '*.app' -print || true
+            find "$PWD/build/DerivedData/Build/Products" \
+              -maxdepth 2 \
+              -type d \
+              -name '*.app' \
+              -print || true
             exit 1
           fi
 
           rm -rf build/Payload
           mkdir -p build/Payload
+
           cp -R "$APP" build/Payload/DELvEK.app
+
           rm -f build/DELvEK-unsigned.ipa
+
           cd build
           zip -qry DELvEK-unsigned.ipa Payload
+
           rm -rf Payload
 
       - name: Verify artifact is unsigned
         run: |
           set -euo pipefail
+
           unzip -q build/DELvEK-unsigned.ipa -d build/verify
+
           APP="build/verify/Payload/DELvEK.app"
+
           echo "Bundle:"
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
+          /usr/libexec/PlistBuddy \
+            -c 'Print :CFBundleIdentifier' \
+            "$APP/Info.plist"
+
           echo "Display name:"
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist" || true
+          /usr/libexec/PlistBuddy \
+            -c 'Print :CFBundleDisplayName' \
+            "$APP/Info.plist" || true
+
           echo "Code signature directories:"
-          find "$APP" -type d -name '_CodeSignature' -print
+          find "$APP" \
+            -type d \
+            -name '_CodeSignature' \
+            -print
+
           echo "Code signatures:"
           codesign -dvv "$APP" 2>&1 || true
 
