@@ -1,0 +1,114 @@
+name: DELvEK Unsigned iOS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-unsigned:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Prepare OpenSSL XCFramework
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          OPENSSL_DIR="$GITHUB_WORKSPACE/OpenSSL"
+          FRAMEWORK="$OPENSSL_DIR/Frameworks/OpenSSL.xcframework"
+          OPENSSL_COMMIT="623c84da314e85363236507ca38a4bde65df21c3"
+
+          if [ ! -f "$FRAMEWORK/Info.plist" ]; then
+            echo "OpenSSL.xcframework is missing; restoring the exact OpenSSL revision expected by LiveContainer."
+
+            rm -rf "$OPENSSL_DIR"
+            git init "$OPENSSL_DIR"
+            git -C "$OPENSSL_DIR" remote add origin https://github.com/krzyzanowskim/OpenSSL.git
+            git -C "$OPENSSL_DIR" fetch --depth 1 origin "$OPENSSL_COMMIT"
+            git -C "$OPENSSL_DIR" checkout --detach FETCH_HEAD
+          fi
+
+          if [ ! -f "$FRAMEWORK/Info.plist" ]; then
+            echo "::error::OpenSSL.xcframework is still missing after restoring OpenSSL commit $OPENSSL_COMMIT."
+            echo "OpenSSL directory:"
+            find "$OPENSSL_DIR" -maxdepth 3 -print | head -200
+            exit 1
+          fi
+
+          echo "OpenSSL XCFramework verified:"
+          ls -la "$FRAMEWORK"
+          echo "OpenSSL revision:"
+          git -C "$OPENSSL_DIR" rev-parse HEAD
+
+      - name: Select Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.6.0"
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project "LiveContainer.xcodeproj" \
+            -scheme "LiveContainer"
+
+      - name: Build unsigned DELvEK
+        run: |
+          set -o pipefail
+          rm -rf build/DerivedData
+          xcodebuild build \
+            -project "LiveContainer.xcodeproj" \
+            -scheme "LiveContainer" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$PWD/build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=NO \
+          | xcpretty
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="$PWD/build/DerivedData/Build/Products/Release-iphoneos/DELvEK.app"
+          if [ ! -d "$APP" ]; then
+            echo "DELvEK.app was not produced. Available products:"
+            find "$PWD/build/DerivedData/Build/Products" -maxdepth 2 -type d -name '*.app' -print || true
+            exit 1
+          fi
+
+          rm -rf build/Payload
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/DELvEK.app
+          rm -f build/DELvEK-unsigned.ipa
+          cd build
+          zip -qry DELvEK-unsigned.ipa Payload
+          rm -rf Payload
+
+      - name: Verify artifact is unsigned
+        run: |
+          set -euo pipefail
+          unzip -q build/DELvEK-unsigned.ipa -d build/verify
+          APP="build/verify/Payload/DELvEK.app"
+          echo "Bundle:"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
+          echo "Display name:"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist" || true
+          echo "Code signature directories:"
+          find "$APP" -type d -name '_CodeSignature' -print
+          echo "Code signatures:"
+          codesign -dvv "$APP" 2>&1 || true
+
+      - name: Upload unsigned DELvEK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DELvEK-unsigned
+          path: build/DELvEK-unsigned.ipa
+          if-no-files-found: error
