@@ -2023,8 +2023,38 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             finalNewApp.autoSaveDisabled = false
             finalNewApp.save()
         } else {
-            // enable SDK version spoof by defalut
+            // Fresh installs get their first guest container immediately. Previously
+            // the container was created only when the user launched the guest for
+            // the first time, which made a successfully downloaded IPA look
+            // installed but left it without the guest sandbox until launch.
+            let containerName = UUID().uuidString
+            let containerRoot = finalNewApp.isShared
+                ? LCPath.lcGroupDataPath
+                : LCPath.dataPath
+            let containerURL = containerRoot.appendingPathComponent(containerName)
+
+            do {
+                try fm.createDirectory(at: containerURL, withIntermediateDirectories: true)
+            } catch {
+                try? fm.removeItem(at: outputFolder)
+                throw error
+            }
+
+            let guestContainer = LCContainer(
+                folderName: containerName,
+                name: containerName,
+                isShared: finalNewApp.isShared
+            )
+            guestContainer.makeLCContainerInfoPlist(
+                appIdentifier: finalNewApp.bundleIdentifier()!,
+                keychainGroupId: Int.random(in: 0..<SharedModel.keychainAccessGroupCount)
+            )
+            finalNewApp.containers = [guestContainer]
+            finalNewApp.dataUUID = containerName
+
+            // enable SDK version spoof by default
             finalNewApp.spoofSDKVersion = true
+            finalNewApp.save()
         }
         // WhatsApp never delivers a local notification unless the fix under the
         // app's Fixes section is on, so turn it on here instead of leaving the
