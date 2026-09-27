@@ -16,41 +16,35 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Prepare OpenSSL XCFramework
+      - name: Prepare litehook source
         shell: bash
         run: |
           set -euo pipefail
 
-          OPENSSL_DIR="$GITHUB_WORKSPACE/OpenSSL"
-          FRAMEWORK="$OPENSSL_DIR/Frameworks/OpenSSL.xcframework"
-          OPENSSL_COMMIT="623c84da314e85363236507ca38a4bde65df21c3"
+          LITEHOOK_DIR="$GITHUB_WORKSPACE/litehook"
+          LITEHOOK_SOURCE="$LITEHOOK_DIR/src/litehook.c"
+          LITEHOOK_COMMIT="a7e9f599d7f0b3d77008ad62bf10cb10dab6eca9"
 
-          if [ ! -f "$FRAMEWORK/Info.plist" ]; then
-            echo "OpenSSL.xcframework is missing; restoring the exact OpenSSL revision expected by LiveContainer."
-
-            rm -rf "$OPENSSL_DIR"
-            git init "$OPENSSL_DIR"
-            git -C "$OPENSSL_DIR" remote add origin https://github.com/krzyzanowskim/OpenSSL.git
-            git -C "$OPENSSL_DIR" fetch --depth 1 origin "$OPENSSL_COMMIT"
-            git -C "$OPENSSL_DIR" checkout --detach FETCH_HEAD
+          if [ ! -f "$LITEHOOK_SOURCE" ]; then
+            echo "litehook/src/litehook.c is missing; restoring litehook commit $LITEHOOK_COMMIT."
+            rm -rf "$LITEHOOK_DIR"
+            git clone --no-checkout https://github.com/LiveContainer/litehook.git "$LITEHOOK_DIR"
+            git -C "$LITEHOOK_DIR" checkout --detach "$LITEHOOK_COMMIT"
           fi
 
-          if [ ! -f "$FRAMEWORK/Info.plist" ]; then
-            echo "::error::OpenSSL.xcframework is still missing after restoring OpenSSL commit $OPENSSL_COMMIT."
-            echo "OpenSSL directory:"
-            find "$OPENSSL_DIR" -maxdepth 3 -print | head -200
+          if [ ! -f "$LITEHOOK_SOURCE" ]; then
+            echo "::error::litehook/src/litehook.c is still missing after restoring litehook commit $LITEHOOK_COMMIT."
+            find "$LITEHOOK_DIR" -maxdepth 3 -print | head -200
             exit 1
           fi
 
-          echo "OpenSSL XCFramework verified:"
-          ls -la "$FRAMEWORK"
-          echo "OpenSSL revision:"
-          git -C "$OPENSSL_DIR" rev-parse HEAD
+          echo "litehook source verified: $LITEHOOK_SOURCE"
+          git -C "$LITEHOOK_DIR" rev-parse HEAD
 
       - name: Select Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "26.6.0"
+          xcode-version: "26.0"
 
       - name: Resolve Swift packages
         run: |
