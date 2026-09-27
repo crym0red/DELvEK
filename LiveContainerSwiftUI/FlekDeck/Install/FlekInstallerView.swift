@@ -222,7 +222,9 @@ struct FlekInstallerView: View {
             if Self.pendingDetailRequest != nil {
                 Task { await openPendingDetail(afterPresentation: true) }
             }
-            await viewModel.refreshSubscriptionStatus()
+            // External/custom sources do not require FlekStore subscription
+            // verification. Catalog loading remains independent of signing and
+            // install, so a FlekStore service outage cannot block IPA installs.
             await viewModel.resetAndFetchApps()
             Task { await MultiRepoSearchModel.prefetchAllRepos() }
         }
@@ -972,13 +974,14 @@ struct FlekInstallerView: View {
         enqueueInstall(app, fromFlekstore: fromFlekstore)
     }
 
-    /// Sources other than FlekSt0re are behind the subscription.
+    /// DELvEK does not gate external/custom-source downloads behind FlekStore
+    /// subscription state. The installer can queue any valid IPA URL directly.
     private func requiresPremium(fromFlekstore: Bool) -> Bool {
-        // DELvEK does not use FlekStore subscription/access control.
         return false
     }
 
-    /// Queues the download + install and counts the FlekSt0re download.
+    /// Queues the download + install. FlekStore download statistics are retained
+    /// only when the selected source is FlekStore.
     ///
     /// The premium gate belongs to the caller: the rows check it here and show
     /// the paywall from this view, while the detail sheet has to show its own —
