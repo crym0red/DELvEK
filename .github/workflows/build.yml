@@ -78,8 +78,6 @@ jobs:
           FRAMEWORK_DIR="$OPENSSL_DIR/Frameworks"
           FRAMEWORK="$FRAMEWORK_DIR/OpenSSL.xcframework"
 
-          # Pinned OpenSSL repository revision known to contain
-          # the expected XCFramework layout.
           OPENSSL_REPOSITORY="https://github.com/krzyzanowskim/OpenSSL.git"
           OPENSSL_COMMIT="623c84da314e85363236507ca38a4bde65df21c3"
 
@@ -175,6 +173,19 @@ jobs:
       # ---------------------------------------------------------
       # Swift packages
       # ---------------------------------------------------------
+      - name: Clear Swift Package Manager cache
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Clearing Xcode/SwiftPM caches..."
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
+          rm -rf "$HOME/Library/Developer/Xcode/Archives"
+          rm -rf "$PWD/build/DerivedData"
+
+          echo "SPM cache cleared"
+
       - name: Resolve Swift packages
         shell: bash
         run: |
