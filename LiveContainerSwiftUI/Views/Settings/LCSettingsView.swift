@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import UserNotifications
+import UniformTypeIdentifiers
 
 enum JITEnablerType : Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
@@ -48,12 +49,14 @@ struct LCSettingsView: View {
     
     @StateObject private var installLC2Alert = AlertHelper<Int>()
     @State private var certificateDataFound = false
+    @State private var provisioningProfileFound = false
     
     @StateObject private var certificateImportAlert = YesNoHelper()
     @StateObject private var certificateImportFromBuiltInSideStoreAlert = YesNoHelper()
     @StateObject private var certificateRemoveAlert = YesNoHelper()
     @StateObject private var certificateImportFileAlert = AlertHelper<URL>()
     @StateObject private var certificateImportPasswordAlert = InputHelper()
+    @StateObject private var provisioningProfileImportFileAlert = AlertHelper<URL>()
     
     @AppStorage("LCFrameShortcutIcons") var frameShortIcon = false
     @AppStorage("LCSwitchAppWithoutAsking") var silentSwitchApp = false
@@ -160,15 +163,6 @@ struct LCSettingsView: View {
         _store = State(initialValue: LCUtils.store())
     }
     
-    let fsPassword: String = {
-        if let dict = Bundle.main.infoDictionary,
-           let value = dict["fsPassword"] as? String,
-           !value.isEmpty {
-            return value
-        }
-        return "12345"
-    }()
-
     private static let subscriptionDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -444,70 +438,11 @@ struct LCSettingsView: View {
                         }
                     }
 
-                    // MARK: - Subscription Status
-                    HStack(spacing: 12) {
-                        Image("premiumLogo")
-                            .resizable()
-                            .frame(width: 36, height: 36)
-                            .cornerRadius(8)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Premium Subscription")
-                                .font(.body)
-
-                            if isSubscriptionLoading {
-                                HStack(spacing: 6) {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                    Text("Checking…")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-                            } else if hasSubscription, let endDate = subscriptionEndDate {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                        .font(.subheadline)
-                                    Text("Valid till \(formattedSubscriptionDate(endDate))")
-                                        .font(.subheadline)
-                                        .foregroundColor(.green)
-                                }
-                            } else if let endDate = subscriptionEndDate {
-                                Text("Ended \(formattedSubscriptionDate(endDate))")
-                                    .font(.subheadline)
-                                    .foregroundColor(.red)
-                            } else {
-                                Text("No active subscription")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray)
-                            }
-                        }
-
-                        Spacer()
-
-                        Button {
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            Task {
-                                if !udid.isEmpty {
-                                    await checkSubscription()
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 18))
-                                .foregroundColor(.blue)
-                        }
-                        .disabled(isSubscriptionLoading)
-                    }
-                    .padding(.vertical, 6)
-                }
-                // MARK: - Certificate (shown only when no certificate is detected)
+                // MARK: - Certificate
+                // DELvEK never requires a FlekStore certificate. Keep the normal
+                // user-provided certificate import for JIT/signing workflows.
                 if sharedModel.multiLCStatus != 2 && !certificateDataFound {
                     Section {
-                        Button("Import Flekstore certificate") {
-                            Task { await importEmbeddedCertificate() }
-                        }
-                        
                         Button("lc.settings.importCertificate".loc) {
                             Task { await importCertificate() }
                         }
@@ -547,7 +482,9 @@ struct LCSettingsView: View {
                     }
                 }
                 Section {
-                    linkRow("FlekIconFlekStore", "FlekSt0re.com", action: openFlekstore)
+                    linkRow("GitHub", "DELvEK.NET", action: {
+                        if let url = URL(string: "https://delvek.net") { UIApplication.shared.open(url) }
+                    })
                     linkRow("GitHub", "GitHub - LiveContainer", action: openGitHub)
                     linkRow("GitHub", "lc.flek.sourceCode".loc, action: openFlekDeckRepo)
                     linkRow("Twitter", "khanhduytran0", action: openTwitter)
@@ -584,10 +521,14 @@ struct LCSettingsView: View {
                             .foregroundStyle(.gray)
                         // A Link here would take over the whole Form row and swallow
                         // the version tap above it, so open the URL by hand instead.
-                        Text("FlekSt0re")
+                        Text("DELvEK.NET")
                             .foregroundStyle(.blue)
                             .contentShape(Rectangle())
-                            .onTapGesture(perform: openFlekstore)
+                            .onTapGesture {
+                                if let url = URL(string: "https://delvek.net") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }
                     }
                     // The size this line has always been. Only the version below the
                     // footer was meant to match it, and a font set here is nearer the
@@ -700,13 +641,8 @@ struct LCSettingsView: View {
                 loadEncryptedUDIDFromPlist()
                 hydrateSubscriptionStateFromStorage()
 
-                // Fetch once for initial subscription bootstrap only.
-                if !subscriptionInitialized {
-                    Task {
-                        await checkSubscription()
-                        subscriptionInitialized = true
-                    }
-                }
+                // DELvEK has no FlekStore subscription/access bootstrap.
+                subscriptionInitialized = true
             }
             .onChange(of: deviceUDID) { newValue in
                 udid = newValue
@@ -768,6 +704,11 @@ struct LCSettingsView: View {
             }, onDismiss: {
                 certificateImportFileAlert.close(result: nil)
             })
+            .betterFileImporter(isPresented: $provisioningProfileImportFileAlert.show, types: [UTType(filenameExtension: "mobileprovision") ?? .data], multiple: false, callback: { fileUrls in
+                provisioningProfileImportFileAlert.close(result: fileUrls[0])
+            }, onDismiss: {
+                provisioningProfileImportFileAlert.close(result: nil)
+            })
             .textFieldAlert(
                 isPresented: $certificateImportPasswordAlert.show,
                 title: "lc.settings.importCertificateInputPassword".loc,
@@ -783,9 +724,7 @@ struct LCSettingsView: View {
             )
         }
         .onAppear {
-            if !certificateDataFound {
-                Task { await importEmbeddedCertificate() }
-            }
+            provisioningProfileFound = LCUtils.appGroupUserDefault.data(forKey: "LCProvisioningProfileData") != nil
             if !isViewAppeared {
                 guard sharedModel.selectedTab == .settings, let link = sharedModel.deepLink else { return }
                 sharedModel.deepLink = nil
@@ -1082,63 +1021,117 @@ struct LCSettingsView: View {
 
     @ViewBuilder private var signingPage: some View {
         Form {
-                Section {
-                    Toggle(isOn: $dontSignApp) {
-                        Text("lc.settings.dontSign".loc)
-                    }
-                } footer: {
-                    Text("lc.settings.dontSignDesc".loc)
+            Section {
+                HStack {
+                    Label("Device UDID", systemImage: "iphone")
+                    Spacer()
+                    Text(deviceUDID.isEmpty ? "Not set" : deviceUDID)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                
-                Section {
-                    Toggle(isOn: $customBundleIdEnabled) {
-                        Text("lc.settings.customBundleId".loc)
-                    }
-                } footer: {
-                    Text("lc.settings.customBundleIdDesc".loc)
+                HStack {
+                    Label("Signing Certificate", systemImage: "checkmark.seal")
+                    Spacer()
+                    Text(certificateDataFound ? "P12 imported" : "Not configured")
+                        .foregroundStyle(certificateDataFound ? .green : .secondary)
                 }
-                
-                Section {
-                    NavigationLink {
-                        LCDataManagementView()
+                HStack {
+                    Label("Provisioning Profile", systemImage: "doc.badge.gearshape")
+                    Spacer()
+                    Text(provisioningProfileFound ? "Imported" : "Not configured")
+                        .foregroundStyle(provisioningProfileFound ? .green : .secondary)
+                }
+            } header: {
+                Text("DELvEK Signing")
+            } footer: {
+                Text("Use your own P12 certificate/private key and mobileprovision profile. DELvEK does not require a FlekSt0re account or certificate.")
+            }
+
+            Section {
+                Button {
+                    if UserDefaults.sideStoreExist() {
+                        LCUtils.openSideStore()
+                    } else {
+                        if let url = URL(string: "sidestore://") {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                } label: {
+                    Label("Apple Account & 7-Day Signing", systemImage: "person.crop.circle.badge.checkmark")
+                }
+
+                Button {
+                    if UserDefaults.sideStoreExist() {
+                        LCUtils.openSideStore()
+                    }
+                } label: {
+                    Label("Open SideStore / Anisette", systemImage: "arrow.up.right.square")
+                }
+                .disabled(!UserDefaults.sideStoreExist())
+            } header: {
+                Text("Apple Account")
+            } footer: {
+                Text("Sign in through the bundled SideStore using your Apple Account. SideStore handles the Apple authentication and Anisette signing workflow; DELvEK receives the resulting signing certificate locally.")
+            }
+
+            Section {
+                if !certificateDataFound {
+                    Button { Task { await importCertificate() } } label: {
+                        Label("Import .p12 Certificate", systemImage: "arrow.down.doc")
+                    }
+                } else {
+                    Button(role: .destructive) { Task { await removeCertificate() } } label: {
+                        Label("Remove Certificate", systemImage: "trash")
+                    }
+                }
+
+                Button { Task { await importProvisioningProfile() } } label: {
+                    Label(provisioningProfileFound ? "Replace .mobileprovision" : "Import .mobileprovision", systemImage: "arrow.down.doc")
+                }
+
+                if provisioningProfileFound {
+                    Button(role: .destructive) {
+                        LCUtils.appGroupUserDefault.removeObject(forKey: "LCProvisioningProfileData")
+                        provisioningProfileFound = false
                     } label: {
-                        Text("lc.settings.dataManagement".loc)
+                        Label("Remove Provisioning Profile", systemImage: "trash")
                     }
                 }
-                
-                if (store != .Unknown && store != .ADP) || LCUtils.isAppGroupAltStoreLike() {
-                    Section{
-                        NavigationLink {
-                            LCMultiLCManagementView()
-                        } label: {
-                            if sharedModel.multiLCStatus == 0 {
-                                Text("lc.settings.multiLCInstall".loc)
-                            } else if sharedModel.multiLCStatus == 2 {
-                                Text("lc.settings.multiLCIsSecond".loc)
-                            }
-                            
-                        }
-                        .disabled(sharedModel.multiLCStatus == 2)
-                        
-                        if(sharedModel.multiLCStatus == 2) {
-                            NavigationLink {
-                                LCJITLessDiagnoseView()
-                            } label: {
-                                Text("lc.settings.jitlessDiagnose".loc)
-                            }
-                        }
-                    } header: {
-                        Text("lc.settings.multiLC".loc)
-                    } footer: {
-                        Text("lc.settings.multiLCDesc".loc)
+            } header: {
+                Text("Signing Assets")
+            } footer: {
+                Text("The P12 password is requested locally when importing the certificate. The provisioning profile is stored with the app's existing signing data.")
+            }
+
+            Section {
+                Toggle(isOn: $dontSignApp) { Text("lc.settings.dontSign".loc) }
+            } footer: { Text("lc.settings.dontSignDesc".loc) }
+
+            Section {
+                Toggle(isOn: $customBundleIdEnabled) { Text("lc.settings.customBundleId".loc) }
+            } footer: { Text("lc.settings.customBundleIdDesc".loc) }
+
+            Section {
+                NavigationLink { LCDataManagementView() } label: { Text("lc.settings.dataManagement".loc) }
+            }
+
+            if (store != .Unknown && store != .ADP) || LCUtils.isAppGroupAltStoreLike() {
+                Section {
+                    NavigationLink { LCMultiLCManagementView() } label: {
+                        if sharedModel.multiLCStatus == 0 { Text("lc.settings.multiLCInstall".loc) }
+                        else if sharedModel.multiLCStatus == 2 { Text("lc.settings.multiLCIsSecond".loc) }
+                    }.disabled(sharedModel.multiLCStatus == 2)
+                    if sharedModel.multiLCStatus == 2 {
+                        NavigationLink { LCJITLessDiagnoseView() } label: { Text("lc.settings.jitlessDiagnose".loc) }
                     }
-                }
+                } header: { Text("lc.settings.multiLC".loc) } footer: { Text("lc.settings.multiLCDesc".loc) }
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .principal) { Text("lc.flek.cat.signing".loc).font(.headline) } }
+        .toolbar { ToolbarItem(placement: .principal) { Text("DELvEK Signing").font(.headline) } }
     }
 
-    
     func openFleksign() {
         UIApplication.shared.open(URL(string: "https://fleksign.com")!)
     }
@@ -1224,44 +1217,25 @@ struct LCSettingsView: View {
         UserDefaults.standard.set(LCSharedUtils.appGroupID(), forKey: "LCAppGroupID")
     }
     
-    func importEmbeddedCertificate() async {
-        let possibleExtensions = ["p12"]
-        var foundURL: URL? = nil
-        for ext in possibleExtensions {
-            if let url = Bundle.main.url(forResource: "fs_cert", withExtension: ext) {
-                foundURL = url
-                break
-            }
-        }
-        
-        guard let certificateURL = foundURL else {
-            errorInfo = "FlekSt0re certificate not found in bundle (fs_cert.*). Make sure it's added to Copy Bundle Resources."
-            errorShow = true
-            return
-        }
-        
+    func importProvisioningProfile() async {
+        guard let profileURL = await provisioningProfileImportFileAlert.open() else { return }
         do {
-            let certificateData = try Data(contentsOf: certificateURL)
-            let certificatePassword = fsPassword
-            
-            // Validate using existing util (same check used in importCertificate())
-            guard let _ = LCUtils.getCertTeamId(withKeyData: certificateData, password: certificatePassword) else {
-                errorInfo = "lc.settings.invalidCertError".loc
+            let data = try Data(contentsOf: profileURL)
+            guard !data.isEmpty else {
+                errorInfo = "The provisioning profile is empty."
                 errorShow = true
                 return
             }
-            
-            // Reuse the same storage logic that SideStore flow uses
-            onSideStoreCertificateCallback(certificateData: certificateData, password: certificatePassword)
-            
-            successInfo = "FlekSt0re certificate imported."
+            LCUtils.appGroupUserDefault.set(data, forKey: "LCProvisioningProfileData")
+            provisioningProfileFound = true
+            successInfo = "Provisioning profile imported."
             successShow = true
         } catch {
-            errorInfo = "Failed to read FlekSt0re certificate: \(error.localizedDescription)"
+            errorInfo = error.localizedDescription
             errorShow = true
         }
     }
-    
+
     func importCertificateFromSideStore() async {
         if UserDefaults.sideStoreExist() {
             if let ans = await certificateImportFromBuiltInSideStoreAlert.open(), ans {
@@ -1325,7 +1299,7 @@ struct LCSettingsView: View {
             storeScheme = "sidestore"
         }
         
-        guard let url = URL(string: "\(storeScheme.lowercased())://certificate?callback_template=flekdeck%3A%2F%2Fcertificate%3Fcert%3D%24%28BASE64_CERT%29%26password%3D%24%28PASSWORD%29") else {
+        guard let url = URL(string: "\(storeScheme.lowercased())://certificate?callback_template=delvek%3A%2F%2Fcertificate%3Fcert%3D%24%28BASE64_CERT%29%26password%3D%24%28PASSWORD%29") else {
             errorInfo = "Failed to initialize certificate import URL."
             errorShow = true
             return
@@ -1347,7 +1321,9 @@ struct LCSettingsView: View {
         LCUtils.appGroupUserDefault.set(nil, forKey: "LCCertificateData")
         LCUtils.appGroupUserDefault.set(nil, forKey: "LCCertificatePassword")
         LCUtils.appGroupUserDefault.set(nil, forKey: "LCCertificateUpdateDate")
+        LCUtils.appGroupUserDefault.removeObject(forKey: "LCProvisioningProfileData")
         certificateDataFound = false
+        provisioningProfileFound = false
         
         UserDefaults.standard.set(nil, forKey: "LCAppGroupID")
     }
