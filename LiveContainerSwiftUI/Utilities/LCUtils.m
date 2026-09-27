@@ -139,6 +139,18 @@
     }
 
     NSLog(@"[LC] starting signing...");
+
+    // DELvEK: use the user's own provisioning profile when one has been imported.
+    NSData *provisioningProfile = [LCUtils.appGroupUserDefault objectForKey:@"LCProvisioningProfileData"];
+    if (provisioningProfile.length > 0) {
+        NSString *profilePath = [[path path] stringByAppendingPathComponent:@"embedded.mobileprovision"];
+        NSError *profileError = nil;
+        if (![provisioningProfile writeToFile:profilePath options:NSDataWritingAtomic error:&profileError]) {
+            NSLog(@"[DELvEK] failed to install user's provisioning profile: %@", profileError);
+            completionHandler(NO, profileError);
+            return nil;
+        }
+    }
     
     NSProgress* ans = [NSClassFromString(@"ZSigner") signWithAppPath:[path path] bundleId:NSBundle.mainBundle.bundleIdentifier cert:self.certificateData pass:LCSharedUtils.certificatePassword completionHandler:completionHandler];
     

@@ -377,9 +377,7 @@ struct FlekAppDetailSheet: View {
 
     private var installButton: some View {
         Button {
-            if requiresPremium {
-                showPremium = true
-            } else if installItem != nil {
+            if installItem != nil {
                 installQueue.cancel(url: app.install_url)
             } else {
                 onInstall(overrides.isEmpty ? nil : overrides)

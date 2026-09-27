@@ -974,7 +974,8 @@ struct FlekInstallerView: View {
 
     /// Sources other than FlekSt0re are behind the subscription.
     private func requiresPremium(fromFlekstore: Bool) -> Bool {
-        !fromFlekstore && !viewModel.hasSubscription
+        // DELvEK does not use FlekStore subscription/access control.
+        return false
     }
 
     /// Queues the download + install and counts the FlekSt0re download.

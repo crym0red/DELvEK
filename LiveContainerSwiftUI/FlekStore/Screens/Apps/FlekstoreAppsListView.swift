@@ -349,16 +349,11 @@ struct AppRow: View {
             VStack {
                 Spacer()
                 Button(action: {
-                    // Check your condition here
-                    if isCustomRepository && !hasSubscription {
-                        print("Subscription required")
-                        onPremiumRequired()
-                    } else {
-                        selectedTab = .apps
-                        flekstoreSharedModel.appInstallURL = app.install_url
-                        if !isCustomRepository {
-                            FlekstoreAppsListViewModel.recordDownload(appId: app.app_id)
-                        }
+                    // DELvEK repositories do not require FlekStore Premium.
+                    selectedTab = .apps
+                    flekstoreSharedModel.appInstallURL = app.install_url
+                    if !isCustomRepository {
+                        FlekstoreAppsListViewModel.recordDownload(appId: app.app_id)
                     }
                 }) {
                     Text("GET")

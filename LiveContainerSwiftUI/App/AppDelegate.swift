@@ -133,11 +133,6 @@ import Intents
             MultitaskDockManager.migrateHapticsPreferenceIfNeeded()
         }
 
-        // Auto-import embedded fs_cert.p12 if no certificate is stored yet
-        if LCSharedUtils.certificatePassword() == nil {
-            Self.importEmbeddedCertificateIfNeeded()
-        }
-        
         return true
     }
     
