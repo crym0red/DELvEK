@@ -324,7 +324,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>fsPassword</key>
-	<string>12345</string>
 </dict>
 </plist>
