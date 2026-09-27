@@ -16,15 +16,6 @@ struct LCTabView: View {
     @AppStorage("LCBetaBannerOverride", store: LCUtils.appGroupUserDefault) private var betaBannerOverride: Int = 0
     
     @State var previousSelectedTab : LCTabIdentifier = .apps
-    @State private var isBlocked = false
-    @State private var hasCheckedBlockedStatus = false
-    @State private var didFailBlockedStatusCheck = false
-    @State private var didRunPostGateStartup = false
-    @State private var isVerifyingAccess = false
-    @State private var accessVerificationFailureMessage = "Please check your internet connection and try again."
-    @State private var blockedReason = "Unavailable"
-    @State private var blockedMessage = "Your access has been limited by the service."
-    @AppStorage("FSEncryptedUDID") private var encryptedUDID: String = ""
     
     @EnvironmentObject var sharedModel : SharedModel
     @EnvironmentObject var sceneDelegate: SceneDelegate
@@ -38,28 +29,9 @@ struct LCTabView: View {
     let pub = NotificationCenter.default.publisher(for: UIScene.didDisconnectNotification)
     
     var body: some View {
-        Group {
-            if !hasCheckedBlockedStatus {
-                ZStack {
-                    Color.black.ignoresSafeArea()
-                    ProgressView()
-                        .tint(.white)
-                }
-            } else if didFailBlockedStatusCheck {
-                AccessVerificationFailedView(message: accessVerificationFailureMessage) {
-                    Task {
-                        await verifyAccess(forceNetworkCheck: true)
-                    }
-                }
-            } else if isBlocked {
-                AccessBlockedView(reason: blockedReason, message: blockedMessage)
-            } else {
-                // FlekDeck: the springboard home screen replaces the old tab bar.
-                // Settings and the Installer are now opened as full-screen pages from
-                // the home screen instead of being separate tabs.
-                LCAppListView(searchContext: searchContextAppList)
-            }
-        }
+        // DELvEK does not require FlekSt0re access verification to launch.
+        // The host/container UI is available independently of any FlekSt0re service.
+        LCAppListView(searchContext: searchContextAppList)
         .modifier(DeferBottomHomeGestureModifier())
         .alert("lc.common.error".loc, isPresented: $errorShow) {
             Button("lc.common.ok".loc) {}
@@ -96,7 +68,7 @@ struct LCTabView: View {
         .task {
             setupInitialRepositoriesIfNeeded()
             Task { await MultiRepoSearchModel.prefetchAllRepos() }
-            await verifyAccess()
+            runStartupIfNeeded()
         }
         .onReceive(pub) { out in
             if let scene1 = sceneDelegate.window?.windowScene, let scene2 = out.object as? UIWindowScene, scene1 == scene2 {
@@ -114,18 +86,9 @@ struct LCTabView: View {
             updateBetaOverlay()
         }
         .onChange(of: scenePhase) { newPhase in
-            // `.task` fires once per process, so without this an app the user
-            // never swipes away would be checked exactly once and never again:
-            // a ban issued afterwards would not land until iOS happened to
-            // terminate it. The 24h freshness test inside keeps this to at most
-            // one request per day — every other foreground is served by cache
-            // and makes no network call at all.
-            guard newPhase == .active else {
-                return
-            }
-            Task {
-                await verifyAccess()
-            }
+            guard newPhase == .active else { return }
+            updateBetaOverlay()
+            processPendingURLIfNeeded()
         }
         .onOpenURL { url in
             dispatchURL(url: url)
@@ -136,10 +99,6 @@ struct LCTabView: View {
     }
     
     func dispatchURL(url: URL) {
-        if isBlocked || didFailBlockedStatusCheck || !hasCheckedBlockedStatus {
-            sharedModel.pendingOpenURL = url
-            return
-        }
         repeat {
             if url.isFileURL {
                 sharedModel.selectedTab = .apps
@@ -175,10 +134,7 @@ struct LCTabView: View {
     /// window that is about to be closed as a duplicate can park a document and
     /// have the window that stays open install it.
     func processPendingURLIfNeeded() {
-        guard hasCheckedBlockedStatus, !isBlocked, !didFailBlockedStatusCheck,
-              let url = sharedModel.pendingOpenURL else {
-            return
-        }
+        guard let url = sharedModel.pendingOpenURL else { return }
         sharedModel.pendingOpenURL = nil
         dispatchURL(url: url)
     }
@@ -291,188 +247,62 @@ struct LCTabView: View {
     }
     
     private func setupInitialRepositoriesIfNeeded() {
-        let didSetupKey = "DidSetupDefaultRepositories"
-        
-        guard !UserDefaults.standard.bool(forKey: didSetupKey) else {
-            return
+        // DELvEK's built-in catalog. This replaces the former FlekStore/default
+        // repository bootstrap and does not require any FlekStore service.
+        let delvekRepo = AppRepository(
+            name: "DELvEK.NET",
+            iconUrl: "https://delvek.net/img/delvek4.png",
+            sourceURL: "https://delvek.net/repo.json",
+            isSelected: true
+        )
+
+        let setupKey = "DidSetupDELvEKRepositories"
+        var repositories: [AppRepository] = []
+
+        if let data = UserDefaults.standard.data(forKey: "savedRepositories"),
+           let saved = try? JSONDecoder().decode([AppRepository].self, from: data) {
+            repositories = saved
         }
-        
-        let defaultApps: [AppRepository] = [
+
+        // Remove legacy FlekStore/default-catalog entries. Keep user-added
+        // repositories, then ensure the DELvEK catalog is present.
+        repositories.removeAll { repo in
+            repo.sourceURL == "Default app catalog" ||
+            repo.sourceURL.localizedCaseInsensitiveContains("flekstore.com") ||
+            repo.name.localizedCaseInsensitiveContains("flekstore")
+        }
+
+        if !repositories.contains(where: { $0.sourceURL == delvekRepo.sourceURL }) {
+            repositories.insert(delvekRepo, at: 0)
+        } else {
+            repositories = repositories.map { repo in
+                AppRepository(
+                    name: repo.sourceURL == delvekRepo.sourceURL ? delvekRepo.name : repo.name,
+                    iconUrl: repo.sourceURL == delvekRepo.sourceURL ? delvekRepo.iconUrl : repo.iconUrl,
+                    sourceURL: repo.sourceURL,
+                    isSelected: repo.sourceURL == delvekRepo.sourceURL ? true : repo.isSelected
+                )
+            }
+        }
+
+        // On migration, make DELvEK.NET the selected source.
+        repositories = repositories.map { repo in
             AppRepository(
-                name: "FlekSt0re Lib",
-                iconUrl: "https://flekstore.com/pro_app/icons/apple-touch-icon.png",
-                sourceURL: "Default app catalog",
-                isSelected: true
-            ),
-            AppRepository(
-                name: "Nabzclan - App Store",
-                iconUrl: "https://cdn.nabzclan.vip/popupv3/imgs/logo-tras.png",
-                sourceURL: "https://appstore.nabzclan.vip/repos/altstore.php",
-                isSelected: false
-            ),
-            AppRepository(
-                name: "AppTesters IPA Repo",
-                iconUrl: "https://apptesters.org/apptesters-512x512.png",
-                sourceURL: "https://repository.apptesters.org/",
-                isSelected: false
-            ),
-            AppRepository(
-                name: "Quantum Source",
-                iconUrl: "https://quarksources.github.io/assets/ElementQ-Circled.png",
-                sourceURL: "https://quarksources.github.io/dist/quantumsource.min.json",
-                isSelected: false
+                name: repo.name,
+                iconUrl: repo.iconUrl,
+                sourceURL: repo.sourceURL,
+                isSelected: repo.sourceURL == delvekRepo.sourceURL
             )
-        ]
-        
-        if let data = try? JSONEncoder().encode(defaultApps) {
+        }
+
+        if let data = try? JSONEncoder().encode(repositories) {
             UserDefaults.standard.set(data, forKey: "savedRepositories")
         }
-        UserDefaults.standard.set(true, forKey: didSetupKey)
-        
+        UserDefaults.standard.set(true, forKey: setupKey)
     }
-    /// Single entry point for the access gate.
-    ///
-    /// The re-entrancy guard matters because the launch check and the first
-    /// `.inactive` -> `.active` transition both land at cold start, and without
-    /// it they would run two overlapping checks. Setting the flag before the
-    /// first `await` is what makes the guard reliable.
+    /// Normal DELvEK startup. No FlekSt0re access/UDID verification is performed.
     @MainActor
-    private func verifyAccess(forceNetworkCheck: Bool = false) async {
-        guard !isVerifyingAccess else {
-            return
-        }
-        isVerifyingAccess = true
-        await refreshBlockedStatus(forceNetworkCheck: forceNetworkCheck)
-        runPostGateStartupIfNeeded()
-        isVerifyingAccess = false
-    }
-
-    private func refreshBlockedStatus(forceNetworkCheck: Bool = false) async {
-        #if targetEnvironment(simulator)
-        await MainActor.run {
-            isBlocked = false
-            didFailBlockedStatusCheck = false
-            hasCheckedBlockedStatus = true
-        }
-        return
-        #endif
-
-        guard let resolvedEncryptedUDID = resolveEncryptedUDID() else {
-            await MainActor.run {
-                accessVerificationFailureMessage = "User UDID is empty. Please contact FlekSt0re tech support."
-                didFailBlockedStatusCheck = true
-                hasCheckedBlockedStatus = true
-            }
-            return
-        }
-
-        let cached = AccessVerdictStore.load(for: resolvedEncryptedUDID)
-
-        // A ban is sticky: it applies with no network at all, so switching the
-        // device offline is not a way around it. The background refresh below is
-        // what lets a lifted ban clear.
-        if let cached, cached.isBanned {
-            await MainActor.run {
-                applyBan(reason: cached.banReason, message: cached.banMessage)
-            }
-            refreshVerdictInBackground(for: resolvedEncryptedUDID)
-            return
-        }
-
-        // A clean verdict opens the app immediately. Inside the refresh interval
-        // the server is not contacted at all; past it we re-check, but in the
-        // background, so a plane or a dead zone never keeps a user out of apps
-        // they have already installed.
-        if let cached, !forceNetworkCheck, cached.isWithinGraceWindow() {
-            await MainActor.run {
-                applyAccessGranted()
-            }
-            if !cached.isFresh() {
-                refreshVerdictInBackground(for: resolvedEncryptedUDID)
-            }
-            return
-        }
-
-        // No usable verdict: a first launch, a new device, or a verdict older
-        // than the grace window. Nothing opens until the server answers.
-        switch await AccessVerificationService.fetchStatus(encryptedUDID: resolvedEncryptedUDID) {
-        case .answered(let response):
-            AccessVerdictStore.save(response, for: resolvedEncryptedUDID)
-            await MainActor.run {
-                if response.isBanned {
-                    applyBan(reason: response.banReason, message: response.message)
-                } else {
-                    applyAccessGranted()
-                }
-            }
-        case .unreachable:
-            await MainActor.run {
-                applyVerificationFailure("Please check your internet connection and try again.")
-            }
-        case .serviceError:
-            await MainActor.run {
-                applyVerificationFailure("FlekSt0re is temporarily unavailable. Please try again in a few minutes.")
-            }
-        }
-    }
-
-    /// Re-checks the verdict without blocking the UI. Access has already been
-    /// decided by this point, so a failed check changes nothing — only a
-    /// definite answer from the server does.
-    private func refreshVerdictInBackground(for encryptedUDID: String) {
-        Task {
-            guard case .answered(let response) = await AccessVerificationService.fetchStatus(
-                encryptedUDID: encryptedUDID
-            ) else {
-                return
-            }
-            AccessVerdictStore.save(response, for: encryptedUDID)
-
-            await MainActor.run {
-                if response.isBanned {
-                    applyBan(reason: response.banReason, message: response.message)
-                } else {
-                    applyAccessGranted()
-                    runPostGateStartupIfNeeded()
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private func applyBan(reason: String?, message: String?) {
-        isBlocked = true
-        blockedReason = formatBanReason(reason)
-        blockedMessage = formatBanMessage(message)
-        didFailBlockedStatusCheck = false
-        hasCheckedBlockedStatus = true
-    }
-
-    @MainActor
-    private func applyAccessGranted() {
-        isBlocked = false
-        didFailBlockedStatusCheck = false
-        accessVerificationFailureMessage = "Please check your internet connection and try again."
-        hasCheckedBlockedStatus = true
-    }
-
-    @MainActor
-    private func applyVerificationFailure(_ message: String) {
-        accessVerificationFailureMessage = message
-        didFailBlockedStatusCheck = true
-        hasCheckedBlockedStatus = true
-    }
-
-    /// One-time startup work that must not run until access is settled. It is
-    /// idempotent because a lifted ban can open the app after the initial pass
-    /// has already returned.
-    @MainActor
-    private func runPostGateStartupIfNeeded() {
-        guard hasCheckedBlockedStatus, !isBlocked, !didFailBlockedStatusCheck, !didRunPostGateStartup else {
-            return
-        }
-        didRunPostGateStartup = true
-
+    private func runStartupIfNeeded() {
         sharedModel.selectedTab = .apps
         closeDuplicatedWindow()
         checkLastLaunchError()
@@ -482,37 +312,6 @@ struct LCTabView: View {
         checkPrivateContainerBookmark()
         updateBetaOverlay()
         processPendingURLIfNeeded()
-    }
-
-    private func resolveEncryptedUDID() -> String? {
-        let stored = encryptedUDID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !stored.isEmpty {
-            return stored
-        }
-
-        if let bundleValue = Bundle.main.infoDictionary?["encryptedUdid"] as? String {
-            let trimmed = bundleValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                encryptedUDID = trimmed
-                return trimmed
-            }
-        }
-
-        return nil
-    }
-
-    private func formatBanReason(_ rawReason: String?) -> String {
-        let trimmed = rawReason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return "Unavailable" }
-
-        return trimmed.replacingOccurrences(of: "_", with: " ").capitalized
-    }
-
-    private func formatBanMessage(_ rawMessage: String?) -> String {
-        let trimmed = rawMessage?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return "Your access has been limited by the service." }
-
-        return trimmed
     }
 
     private func updateBetaOverlay() {
@@ -541,50 +340,6 @@ struct LCTabView: View {
         LCUtils.appGroupUserDefault.set(bookmark, forKey: "LCLaunchExtensionPrivateDocBookmark")
     }
 }
-private struct AccessVerificationFailedView: View {
-    let message: String
-    let onRetry: () -> Void
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            VStack(spacing: 16) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundStyle(.yellow)
-
-                Text("Unable to verify access")
-                    .font(.title2.bold())
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-
-                Text(message)
-                    .font(.body)
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .multilineTextAlignment(.center)
-
-                Button(action: onRetry) {
-                    Text("Retry")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                .padding(.top, 8)
-            }
-            .padding(24)
-            .frame(maxWidth: 420)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Color.white.opacity(0.10))
-            )
-            .padding(.horizontal, 24)
-        }
-    }
-}
-
 /// Requires a double-swipe to trigger the bottom system edge gesture
 /// (swipe-up-to-home), preventing accidental exits.
 ///
