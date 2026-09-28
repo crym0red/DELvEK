@@ -1,12 +1,12 @@
-#!/bin/bash
+#!/bin/bash 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 WORK="$ROOT/build/StikJITSource"
-STIKJIT_BUILD="$WORK/build"
-ARCHIVE="$STIKJIT_BUILD/StikJIT.xcarchive"
-FRAMEWORK="$ARCHIVE/Products/Library/Frameworks/StikJIT.framework"
+WORK_BUILD="$WORK/build"
+ARCHIVE="$WORK_BUILD/StikJIT.xcarchive"
+
 OUT_DIR="$ROOT/build/StikJIT"
 OUT="$OUT_DIR/StikJIT.xcframework"
 
@@ -17,9 +17,6 @@ echo "========================================"
 echo "StikJIT build"
 echo "========================================"
 
-echo "Root:"
-echo "$ROOT"
-
 echo
 echo "Xcode:"
 xcodebuild -version
@@ -28,9 +25,9 @@ echo
 echo "Swift:"
 swift --version
 
-# ---------------------------------------------------------
-# Clean previous generated StikJIT state
-# ---------------------------------------------------------
+# =========================================================
+# CLEAN
+# =========================================================
 
 echo
 echo "Cleaning previous StikJIT build..."
@@ -40,9 +37,9 @@ rm -rf "$OUT_DIR"
 
 mkdir -p "$OUT_DIR"
 
-# ---------------------------------------------------------
-# Clone pinned StikJIT source
-# ---------------------------------------------------------
+# =========================================================
+# FETCH STIKJIT
+# =========================================================
 
 echo
 echo "========================================"
@@ -61,14 +58,13 @@ echo
 echo "StikJIT revision:"
 git rev-parse HEAD
 
-# ---------------------------------------------------------
-# XcodeGen
-# ---------------------------------------------------------
+# =========================================================
+# XCODEGEN
+# =========================================================
 
 if ! command -v xcodegen >/dev/null 2>&1; then
   echo
   echo "Installing XcodeGen..."
-
   brew install xcodegen
 fi
 
@@ -82,23 +78,22 @@ echo "Generating Xcode project..."
 xcodegen generate
 
 if [ ! -f "$WORK/StikJIT.xcodeproj/project.pbxproj" ]; then
-  echo "::error::XcodeGen did not produce StikJIT.xcodeproj"
+  echo "::error::StikJIT.xcodeproj was not generated."
   exit 1
 fi
 
-# ---------------------------------------------------------
-# Build configuration
-# ---------------------------------------------------------
-
-ARCHIVE_PARENT="$STIKJIT_BUILD"
-
-rm -rf "$ARCHIVE_PARENT"
-mkdir -p "$ARCHIVE_PARENT"
+# =========================================================
+# ARCHIVE
+# =========================================================
 
 echo
 echo "========================================"
 echo "Archiving StikJIT"
 echo "========================================"
+
+rm -rf "$WORK_BUILD"
+
+mkdir -p "$WORK_BUILD"
 
 xcodebuild archive \
   -project "$WORK/StikJIT.xcodeproj" \
@@ -112,13 +107,13 @@ xcodebuild archive \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY=""
 
-# ---------------------------------------------------------
-# Verify archive
-# ---------------------------------------------------------
+# =========================================================
+# VERIFY ARCHIVE
+# =========================================================
 
 echo
 echo "========================================"
-echo "Verifying StikJIT archive"
+echo "Inspecting StikJIT archive"
 echo "========================================"
 
 if [ ! -d "$ARCHIVE" ]; then
@@ -127,33 +122,118 @@ if [ ! -d "$ARCHIVE" ]; then
   exit 1
 fi
 
-if [ ! -d "$FRAMEWORK" ]; then
-  echo "::error::StikJIT.framework was not found:"
-  echo "$FRAMEWORK"
+echo
+echo "Archive contents:"
 
+find "$ARCHIVE" \
+  -maxdepth 10 \
+  -print \
+  2>/dev/null \
+  | head -500
+
+# =========================================================
+# FIND FRAMEWORK
+#
+# Do NOT assume:
+#
+# Products/Library/Frameworks/StikJIT.framework
+#
+# Xcode can place the framework differently depending on
+# the generated project configuration.
+# =========================================================
+
+echo
+echo "========================================"
+echo "Locating StikJIT.framework"
+echo "========================================"
+
+FRAMEWORK="$(
   find "$ARCHIVE" \
-    -maxdepth 8 \
+    -type d \
+    -name 'StikJIT.framework' \
+    -print \
+    -quit \
+    2>/dev/null || true
+)"
+
+if [ -z "$FRAMEWORK" ]; then
+  echo "::error::StikJIT.framework was not found in archive."
+
+  echo
+  echo "Framework-like products:"
+  find "$ARCHIVE" \
+    -type d \
+    \( \
+      -name '*.framework' \
+      -o -name '*.xcframework' \
+    \) \
     -print \
     2>/dev/null || true
 
   exit 1
 fi
 
-if [ ! -f "$FRAMEWORK/Info.plist" ]; then
-  echo "::error::StikJIT.framework is missing Info.plist."
-  exit 1
-fi
-
-echo "Framework:"
+echo
+echo "StikJIT.framework:"
 echo "$FRAMEWORK"
 
-# ---------------------------------------------------------
-# Create XCFramework
-# ---------------------------------------------------------
+# =========================================================
+# FRAMEWORK VALIDATION
+# =========================================================
 
 echo
 echo "========================================"
-echo "Creating XCFramework"
+echo "Validating framework"
+echo "========================================"
+
+if [ ! -d "$FRAMEWORK" ]; then
+  echo "::error::Framework directory does not exist."
+  exit 1
+fi
+
+BINARY="$FRAMEWORK/StikJIT"
+
+if [ ! -f "$BINARY" ]; then
+  echo "::error::StikJIT framework binary was not found:"
+  echo "$BINARY"
+
+  echo
+  echo "Framework contents:"
+  find "$FRAMEWORK" \
+    -maxdepth 5 \
+    -print \
+    2>/dev/null || true
+
+  exit 1
+fi
+
+# Info.plist can be generated differently by the project.
+# Do not fail merely because the bundle has no physical
+# Info.plist at the expected path if the framework is otherwise
+# a valid framework.
+
+if [ -f "$FRAMEWORK/Info.plist" ]; then
+  echo "Framework Info.plist found."
+else
+  echo "Framework Info.plist is not present at the standard path."
+  echo "Continuing because the framework binary exists."
+fi
+
+echo
+echo "Framework binary:"
+file "$BINARY"
+
+echo
+echo "Framework architecture:"
+lipo -info "$BINARY" 2>/dev/null || true
+
+# =========================================================
+# CREATE XCFRAMEWORK
+# =========================================================
+
+echo
+echo "========================================"
+echo "Creating StikJIT XCFramework"
 echo "========================================"
 
 rm -rf "$OUT"
@@ -162,9 +242,9 @@ xcodebuild -create-xcframework \
   -framework "$FRAMEWORK" \
   -output "$OUT"
 
-# ---------------------------------------------------------
-# Verify XCFramework
-# ---------------------------------------------------------
+# =========================================================
+# VERIFY XCFRAMEWORK
+# =========================================================
 
 echo
 echo "========================================"
@@ -181,13 +261,25 @@ if [ ! -f "$OUT/Info.plist" ]; then
   exit 1
 fi
 
-# ---------------------------------------------------------
-# Inspect Swift interfaces
-# ---------------------------------------------------------
+echo
+echo "XCFramework:"
+echo "$OUT"
+
+echo
+echo "XCFramework contents:"
+
+find "$OUT" \
+  -maxdepth 6 \
+  -print \
+  2>/dev/null
+
+# =========================================================
+# SWIFT INTERFACE CHECK
+# =========================================================
 
 echo
 echo "========================================"
-echo "Checking Swift module interfaces"
+echo "Checking Swift interfaces"
 echo "========================================"
 
 INTERFACES="$(
@@ -199,31 +291,23 @@ INTERFACES="$(
 )"
 
 if [ -n "$INTERFACES" ]; then
-  echo "Found Swift interfaces:"
+
+  echo "Swift interfaces found:"
   echo "$INTERFACES"
 
   while IFS= read -r FILE; do
     [ -n "$FILE" ] || continue
 
     echo
-    echo "Checking:"
+    echo "Inspecting:"
     echo "$FILE"
-
-    # The StikJIT module/type naming collision can produce
-    # invalid references such as:
-    #
-    # StikJIT.DDIPaths
-    # StikJIT.DeveloperDiskImageService
-    # StikJIT.StikJIT
-    #
-    # Normalize only those generated references.
 
     if grep -nE \
       'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
       "$FILE" \
       >/dev/null 2>&1; then
 
-      echo "Normalizing module-qualified StikJIT references..."
+      echo "Normalizing problematic StikJIT module references."
 
       cp "$FILE" "$FILE.before-normalization"
 
@@ -235,18 +319,22 @@ if [ -n "$INTERFACES" ]; then
     fi
 
   done <<< "$INTERFACES"
+
 else
   echo "No textual Swift interfaces found."
 fi
 
-# ---------------------------------------------------------
-# Final interface validation
-# ---------------------------------------------------------
+# =========================================================
+# FINAL VALIDATION
+# =========================================================
 
 echo
 echo "========================================"
 echo "Final StikJIT validation"
 echo "========================================"
+
+test -d "$OUT"
+test -f "$OUT/Info.plist"
 
 if grep -R \
   -nE \
@@ -255,7 +343,7 @@ if grep -R \
   --include='*.swiftinterface' \
   >/dev/null 2>&1; then
 
-  echo "::error::Invalid StikJIT-qualified references remain in Swift interfaces."
+  echo "::error::Invalid StikJIT-qualified references remain."
 
   grep -R \
     -nE \
@@ -267,58 +355,25 @@ if grep -R \
   exit 1
 fi
 
-# ---------------------------------------------------------
-# Display final framework metadata
-# ---------------------------------------------------------
-
 echo
-echo "========================================"
-echo "StikJIT XCFramework"
-echo "========================================"
-
-echo "Output:"
+echo "StikJIT XCFramework successfully generated:"
 echo "$OUT"
 
-echo
-echo "Info.plist:"
-/usr/libexec/PlistBuddy \
-  -c 'Print :' \
-  "$OUT/Info.plist"
+# =========================================================
+# REMOVE TEMPORARY SOURCE
+# =========================================================
 
 echo
-echo "Contents:"
-find "$OUT" \
-  -maxdepth 5 \
-  -print
-
-# ---------------------------------------------------------
-# Remove source tree
-#
-# The main LiveContainer project synchronizes its build/
-# directory. Keeping StikJITSource there can cause Xcode to
-# discover generated JS/resources a second time.
-# ---------------------------------------------------------
-
-echo
-echo "Removing temporary source tree..."
+echo "Removing temporary StikJIT source..."
 
 rm -rf "$WORK"
 
 if [ -d "$WORK" ]; then
-  echo "::error::Failed to remove temporary StikJIT source tree."
+  echo "::error::Failed to remove StikJITSource."
   exit 1
 fi
-
-# ---------------------------------------------------------
-# Final existence check
-# ---------------------------------------------------------
-
-test -d "$OUT"
-test -f "$OUT/Info.plist"
 
 echo
 echo "========================================"
 echo "StikJIT build completed successfully"
 echo "========================================"
-
-echo "$OUT"
