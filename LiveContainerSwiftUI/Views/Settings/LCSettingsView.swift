@@ -18,6 +18,7 @@ enum JITEnablerType : Int, CaseIterable, Identifiable {
     case SideStore = 4
     case StosDebug = 5
     case StosDebugLC = 6
+    case BuiltInStikJIT = 7
     
     var displayName: String {
         switch self {
@@ -28,6 +29,7 @@ enum JITEnablerType : Int, CaseIterable, Identifiable {
         case .SideStore: "SideStore"
         case .JITStreamerEBLegacy: "JitStreamer-EB (Relaunch)"
         case .SideJITServer: "SideJITServer/JITStreamer 2.0"
+        case .BuiltInStikJIT: "DELvEK Built-in JIT"
         }
     }
 }
@@ -48,6 +50,8 @@ struct LCSettingsView: View {
     
     @StateObject private var installLC2Alert = AlertHelper<Int>()
     @State private var certificateDataFound = false
+    @State private var showPairingImporter = false
+    @State private var pairingStatus = LocalJITService.shared.hasPairingFile
     
     @StateObject private var certificateImportAlert = YesNoHelper()
     @StateObject private var certificateImportFromBuiltInSideStoreAlert = YesNoHelper()
@@ -85,7 +89,7 @@ struct LCSettingsView: View {
     @AppStorage("LCSideJITServerAddress", store: LCUtils.appGroupUserDefault) var sideJITServerAddress : String = ""
     @AppStorage("LCDeviceUDID", store: LCUtils.appGroupUserDefault) var deviceUDID: String = ""
     @AppStorage("FSDeviceUDID") private var fsDeviceUDID: String = ""
-    @AppStorage("LCJITEnablerType", store: LCUtils.appGroupUserDefault) var JITEnabler: JITEnablerType = .SideJITServer
+    @AppStorage("LCJITEnablerType", store: LCUtils.appGroupUserDefault) var JITEnabler: JITEnablerType = .BuiltInStikJIT
     
     @State var store : Store = .Unknown
     
@@ -958,12 +962,35 @@ struct LCSettingsView: View {
                                 .multilineTextAlignment(.trailing)
                         }
                     }
+                    if JITEnabler == .BuiltInStikJIT {
+                        Section {
+                            HStack {
+                                Image(systemName: pairingStatus ? "checkmark.circle.fill" : "exclamationmark.circle")
+                                Text(pairingStatus ? "Pairing file ready" : "Pairing file required")
+                                Spacer()
+                            }
+                            Button("Import Pairing File") { showPairingImporter = true }
+                            if pairingStatus {
+                                Button("Remove Pairing File", role: .destructive) {
+                                    LocalJITService.shared.removePairingFile()
+                                    pairingStatus = false
+                                }
+                            }
+                        } header: {
+                            Text("Device Pairing")
+                        } footer: {
+                            Text("Import the pairing file for this iPhone. DELvEK uses it locally for the built-in JIT helper.")
+                        }
+                    }
                     Picker(selection: $JITEnabler) {
                         Text("SideJITServer/JITStreamer 2.0").tag(JITEnablerType.SideJITServer)
                         Text("StikDebug").tag(JITEnablerType.StikJIT)
                         Text("StikDebug (Another FlekDeck)").tag(JITEnablerType.StikJITLC)
                         Text("SideStore").tag(JITEnablerType.SideStore)
                         Text("JitStreamer-EB (Relaunch)").tag(JITEnablerType.JITStreamerEBLegacy)
+                        if #available(iOS 17.4, *) {
+                            Text("DELvEK Built-in JIT").tag(JITEnablerType.BuiltInStikJIT)
+                        }
                     } label: {
                         Text("lc.settings.jitEnabler".loc)
                     }
@@ -975,6 +1002,21 @@ struct LCSettingsView: View {
                 }
                 
                 
+        }
+        .fileImporter(isPresented: $showPairingImporter, allowedContentTypes: [.propertyList], allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let url):
+                do {
+                    try LocalJITService.shared.storePairingFile(from: url)
+                    pairingStatus = true
+                } catch {
+                    errorInfo = error.localizedDescription
+                    errorShow = true
+                }
+            case .failure(let error):
+                errorInfo = error.localizedDescription
+                errorShow = true
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .principal) { Text("lc.flek.cat.jit".loc).font(.headline) } }

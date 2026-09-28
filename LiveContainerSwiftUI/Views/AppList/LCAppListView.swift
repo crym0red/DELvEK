@@ -2460,6 +2460,14 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 
             
             if let jitEnabler = JITEnablerType(rawValue: LCUtils.appGroupUserDefault.integer(forKey: "LCJITEnablerType")) {
+                if jitEnabler == .BuiltInStikJIT {
+                    let result = await LocalJITService.shared.enableJIT(targetPID: Int32(pid))
+                    if !result.success {
+                        self.errorInfo = result.message
+                        self.errorShow = true
+                    }
+                    return
+                }
                 if jitEnabler == .StosDebug || jitEnabler == .StosDebugLC {
                     let encoded = encodedData.map { "&script=\($0)" } ?? ""
                     if jitEnabler == .StosDebugLC {
