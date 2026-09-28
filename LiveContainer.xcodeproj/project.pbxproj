@@ -34,6 +34,8 @@
 		E1292C132DCA46070065E12D /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = E1292C032DCA3C160065E12D /* main.c */; };
 		E16D95742E1CD2980068EB63 /* LCMachOUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = E16D94DE2E1CC8200068EB63 /* LCMachOUtils.m */; };
 		E16D95752E1CD2B90068EB63 /* LiveContainerShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1292BD62DCA3B660065E12D /* LiveContainerShared.framework */; };
+		A1B2C3D42F00000000000001 /* StikJIT.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D42F00000000000002 /* StikJIT.xcframework */; };
+		A1B2C3D42F00000000000003 /* StikJIT.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D42F00000000000002 /* StikJIT.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -153,6 +155,16 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 1;
 		};
+		A1B2C3D42F00000000000004 /* Embed StikJIT */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstSubfolderSpec = 10;
+			files = (
+				A1B2C3D42F00000000000003 /* StikJIT.xcframework in Embed Frameworks */,
+			);
+			name = "Embed StikJIT";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -186,6 +198,7 @@
 		E16D94DE2E1CC8200068EB63 /* LCMachOUtils.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LCMachOUtils.m; sourceTree = "<group>"; };
 		E16D95762E1CD49E0068EB63 /* LCMachOUtils.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LCMachOUtils.h; sourceTree = "<group>"; };
 		E16D9BA02E1D48DE0068EB63 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		A1B2C3D42F00000000000002 /* StikJIT.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = StikJIT.xcframework; path = "build/StikJIT/StikJIT.xcframework"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -421,6 +434,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D42F00000000000001 /* StikJIT.xcframework in Frameworks */,
 				17E23DF02F443A9300C55733 /* LiveContainerShared.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -469,6 +483,7 @@
 		174140B82D9C0F9100F3F928 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C3D42F00000000000002 /* StikJIT.xcframework */,
 				17554B712DA16988004C6D90 /* OpenSSL.xcframework */,
 				174140D52D9C176700F3F928 /* libarchive.tbd */,
 				E12928C92DCA38380065E12D /* UniformTypeIdentifiers.framework */,
@@ -735,6 +750,7 @@
 				17E23DDB2F443A9300C55733 /* Sources */,
 				17E23DDC2F443A9300C55733 /* Frameworks */,
 				17E23DDD2F443A9300C55733 /* Resources */,
+				A1B2C3D42F00000000000004 /* Embed StikJIT */,
 			);
 			buildRules = (
 			);
@@ -1230,7 +1246,7 @@
 					"-DCONFIG_BRANCH=\\\"$(CONFIG_BRANCH)\\\"",
 					"-DCONFIG_COMMIT=\\\"$(CONFIG_COMMIT)\\\"",
 				);
-				OTHER_LDFLAGS = "-Wl,-U,_OBJC_CLASS_$_RBSTarget";
+				OTHER_LDFLAGS = ("-Wl,-U,_OBJC_CLASS_$_RBSTarget", "-framework", "Security");
 				PRODUCT_BUNDLE_IDENTIFIER = com.fs.LiveContainerSwiftUI;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
@@ -1274,7 +1290,7 @@
 					"-DCONFIG_BRANCH=\\\"$(CONFIG_BRANCH)\\\"",
 					"-DCONFIG_COMMIT=\\\"$(CONFIG_COMMIT)\\\"",
 				);
-				OTHER_LDFLAGS = "-Wl,-U,_OBJC_CLASS_$_RBSTarget";
+				OTHER_LDFLAGS = ("-Wl,-U,_OBJC_CLASS_$_RBSTarget", "-framework", "Security");
 				PRODUCT_BUNDLE_IDENTIFIER = com.fs.LiveContainerSwiftUI;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
@@ -1434,7 +1450,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = LaunchAppExtension;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LD_RUNPATH_SEARCH_PATHS = (
+								LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
@@ -1471,7 +1487,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = LaunchAppExtension;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LD_RUNPATH_SEARCH_PATHS = (
+								LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
@@ -1741,14 +1757,18 @@
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ShareExtension;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/build/StikJIT",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 3.8.7;
-				OTHER_LDFLAGS = "";
+				OTHER_LDFLAGS = ("-framework", "StikJIT");
 				PRODUCT_BUNDLE_IDENTIFIER = com.delvek.app.ShareExtension;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.delvek.app.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1781,14 +1801,18 @@
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ShareExtension;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/build/StikJIT",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 3.8.7;
-				OTHER_LDFLAGS = "";
+				OTHER_LDFLAGS = ("-framework", "StikJIT");
 				PRODUCT_BUNDLE_IDENTIFIER = com.delvek.app.ShareExtension;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.delvek.app.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1977,7 +2001,6 @@
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
 				OTHER_CFLAGS = "-fcommon";
-				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.delvek.app.LiveContainerShared;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -2024,7 +2047,6 @@
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
 				OTHER_CFLAGS = "-fcommon";
-				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.delvek.app.LiveContainerShared;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
