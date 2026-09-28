@@ -21,7 +21,7 @@ final class ShareExtensionHandler: UIViewController {
             return
         }
 
-        guard let attachments = item.attachments else {
+        guard let attachments = item.attachments, !attachments.isEmpty else {
             finish()
             return
         }
@@ -32,52 +32,69 @@ final class ShareExtensionHandler: UIViewController {
     }
 
     private func processProvider(_ provider: NSItemProvider) {
-        if provider.hasItemConformingToTypeIdentifier(
-            UTType.propertyList.identifier
-        ) {
-            provider.loadItem(
-                forTypeIdentifier: UTType.propertyList.identifier,
-                options: nil
-            ) { [weak self] item, error in
+        let propertyListType = UTType.propertyList.identifier
 
-                if let error {
-                    NSLog(
-                        "[DELvEK JIT] Failed to load property list: %@",
-                        error.localizedDescription
-                    )
-
-                    DispatchQueue.main.async {
-                        self?.finish()
-                    }
-
-                    return
-                }
-
-                guard
-                    let values = item as? [String: Any]
-                else {
-                    NSLog("[DELvEK JIT] Invalid property list payload.")
-
-                    DispatchQueue.main.async {
-                        self?.finish()
-                    }
-
-                    return
-                }
-
-                self?.handlePayload(values)
-            }
-
+        guard provider.hasItemConformingToTypeIdentifier(propertyListType) else {
+            NSLog("[DELvEK JIT] Unsupported extension item.")
+            finish()
             return
         }
 
-        DispatchQueue.main.async {
-            self.finish()
+        provider.loadItem(
+            forTypeIdentifier: propertyListType,
+            options: nil
+        ) { [weak self] item, error in
+
+            if let error {
+                NSLog(
+                    "[DELvEK JIT] Failed to load property list: %@",
+                    error.localizedDescription
+                )
+
+                self?.finish()
+                return
+            }
+
+            guard let values = self?.dictionary(from: item) else {
+                NSLog("[DELvEK JIT] Invalid property list payload.")
+                self?.finish()
+                return
+            }
+
+            self?.handlePayload(values)
         }
     }
 
-    private func handlePayload(_ values: [String: Any]) {
+    private func dictionary(from item: NSSecureCoding?) -> [String: Any]? {
+        if let dictionary = item as? [String: Any] {
+            return dictionary
+        }
 
+        if let dictionary = item as? NSDictionary {
+            return dictionary as? [String: Any]
+        }
+
+        if let data = item as? Data {
+            do {
+                let object = try PropertyListSerialization.propertyList(
+                    from: data,
+                    options: [],
+                    format: nil
+                )
+
+                return object as? [String: Any]
+            } catch {
+                NSLog(
+                    "[DELvEK JIT] Failed to decode property list: %@",
+                    error.localizedDescription
+                )
+            }
+        }
+
+        return nil
+    }
+
+    private func handlePayload(_ values: [String: Any]) {
         guard
             let pidValue = values["targetPID"] as? Int,
             let pid = Int32(exactly: pidValue),
@@ -85,57 +102,98 @@ final class ShareExtensionHandler: UIViewController {
             let callbackURLString = values["callbackURL"] as? String,
             let callbackURL = URL(string: callbackURLString)
         else {
-            NSLog("[DELvEK JIT] Invalid payload.")
-
+            NSLog("[DELvEK JIT] Invalid JIT payload.")
             finish()
             return
         }
 
-        let paths: StikJIT.DDIPaths
+        let paths: DDIPaths
 
         if let ddiValue = values["ddiPaths"] as? [String: String] {
-            paths = StikJIT.DDIPaths(
-                developerDiskImagePath: ddiValue["developerDiskImagePath"] ?? "",
+            paths = DDIPaths(
+                developerDiskImagePath:
+                    ddiValue["developerDiskImagePath"] ?? "",
                 developerDiskImageTrustCachePath:
                     ddiValue["developerDiskImageTrustCachePath"] ?? ""
             )
+        } else if let ddiValue = values["ddiPaths"] as? NSDictionary {
+            let developerDiskImagePath =
+                ddiValue["developerDiskImagePath"] as? String ?? ""
+
+            let developerDiskImageTrustCachePath =
+                ddiValue["developerDiskImageTrustCachePath"] as? String ?? ""
+
+            paths = DDIPaths(
+                developerDiskImagePath: developerDiskImagePath,
+                developerDiskImageTrustCachePath:
+                    developerDiskImageTrustCachePath
+            )
         } else {
             NSLog("[DELvEK JIT] Missing DDI paths.")
-
             finish()
             return
         }
 
-        let tempDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                UUID().uuidString,
-                isDirectory: true
-            )
+        let temporaryDirectory =
+            FileManager.default.temporaryDirectory
+                .appendingPathComponent(
+                    "DELvEK-JIT",
+                    isDirectory: true
+                )
+                .appendingPathComponent(
+                    UUID().uuidString,
+                    isDirectory: true
+                )
 
         do {
             try FileManager.default.createDirectory(
-                at: tempDirectory,
-                withIntermediateDirectories: true
+                at: temporaryDirectory,
+                withIntermediateDirectories: true,
+                attributes: nil
             )
 
-            let pairingFile = tempDirectory
-                .appendingPathComponent("pairing_file.plist")
+            let pairingFile =
+                temporaryDirectory
+                    .appendingPathComponent(
+                        "pairing_file.plist"
+                    )
 
             try pairingData.write(
                 to: pairingFile,
                 options: [.atomic]
             )
 
+            NSLog(
+                "[DELvEK JIT] Target PID: %d",
+                pid
+            )
+
+            NSLog(
+                "[DELvEK JIT] Pairing file: %@",
+                pairingFile.path
+            )
+
+            NSLog(
+                "[DELvEK JIT] Developer disk image: %@",
+                paths.developerDiskImagePath
+            )
+
+            NSLog(
+                "[DELvEK JIT] Developer disk image trust cache: %@",
+                paths.developerDiskImageTrustCachePath
+            )
+
             enableJIT(
                 pid: pid,
                 pairingFile: pairingFile,
                 paths: paths,
-                callbackURL: callbackURL
+                callbackURL: callbackURL,
+                temporaryDirectory: temporaryDirectory
             )
 
         } catch {
             NSLog(
-                "[DELvEK JIT] Failed preparing pairing file: %@",
+                "[DELvEK JIT] Failed preparing pairing data: %@",
                 error.localizedDescription
             )
 
@@ -146,14 +204,13 @@ final class ShareExtensionHandler: UIViewController {
     private func enableJIT(
         pid: Int32,
         pairingFile: URL,
-        paths: StikJIT.DDIPaths,
-        callbackURL: URL
+        paths: DDIPaths,
+        callbackURL: URL,
+        temporaryDirectory: URL
     ) {
-
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
 
             do {
-
                 try StikJIT.enableJIT(
                     targetPID: pid,
                     pairingFile: pairingFile,
@@ -161,14 +218,12 @@ final class ShareExtensionHandler: UIViewController {
                     script: .universal,
                     forceScript: false,
                     preparationProgress: { stage in
-
                         NSLog(
-                            "[DELvEK JIT] %@",
+                            "[DELvEK JIT] Preparation: %@",
                             String(describing: stage)
                         )
                     },
                     progress: { message in
-
                         NSLog(
                             "[DELvEK JIT] %@",
                             message
@@ -176,7 +231,9 @@ final class ShareExtensionHandler: UIViewController {
                     }
                 )
 
-                NSLog("[DELvEK JIT] JIT enabled successfully.")
+                NSLog(
+                    "[DELvEK JIT] JIT enabled successfully."
+                )
 
                 self?.sendCallback(
                     url: callbackURL,
@@ -184,7 +241,6 @@ final class ShareExtensionHandler: UIViewController {
                 )
 
             } catch {
-
                 NSLog(
                     "[DELvEK JIT] Failed to enable JIT: %@",
                     error.localizedDescription
@@ -196,9 +252,18 @@ final class ShareExtensionHandler: UIViewController {
                 )
             }
 
-            DispatchQueue.main.async {
-                self?.finish()
+            do {
+                try FileManager.default.removeItem(
+                    at: temporaryDirectory
+                )
+            } catch {
+                NSLog(
+                    "[DELvEK JIT] Temporary cleanup failed: %@",
+                    error.localizedDescription
+                )
             }
+
+            self?.finish()
         }
     }
 
@@ -206,13 +271,19 @@ final class ShareExtensionHandler: UIViewController {
         url: URL,
         success: Bool
     ) {
-
-        var components = URLComponents(
+        guard var components = URLComponents(
             url: url,
             resolvingAgainstBaseURL: false
-        )
+        ) else {
+            NSLog("[DELvEK JIT] Invalid callback URL.")
+            return
+        }
 
-        var queryItems = components?.queryItems ?? []
+        var queryItems = components.queryItems ?? []
+
+        queryItems.removeAll {
+            $0.name == "success"
+        }
 
         queryItems.append(
             URLQueryItem(
@@ -221,22 +292,20 @@ final class ShareExtensionHandler: UIViewController {
             )
         )
 
-        components?.queryItems = queryItems
+        components.queryItems = queryItems
 
-        guard let callbackURL = components?.url else {
-            NSLog("[DELvEK JIT] Invalid callback URL.")
+        guard let callbackURL = components.url else {
+            NSLog("[DELvEK JIT] Failed to construct callback URL.")
             return
         }
 
-        DispatchQueue.main.async {
-
-            self.extensionContext?.open(
+        DispatchQueue.main.async { [weak self] in
+            self?.extensionContext?.open(
                 callbackURL,
-                completionHandler: { success in
-
+                completionHandler: { opened in
                     NSLog(
                         "[DELvEK JIT] Callback opened: %@",
-                        success ? "YES" : "NO"
+                        opened ? "YES" : "NO"
                     )
                 }
             )
