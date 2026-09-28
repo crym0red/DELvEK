@@ -102,6 +102,7 @@ import Intents
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? ) -> Bool {
         application.shortcutItems = nil
+        LocalJITService.shared.start()
         UserDefaults.standard.removeObject(forKey: "LCNeedToAcquireJIT")
         
         NotificationCenter.default.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { _ in

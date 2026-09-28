@@ -220,7 +220,11 @@ extension LCUtils {
             return false
         }
         
-        if(jitEnabler == .SideJITServer){
+        if(jitEnabler == .BuiltInStikJIT) {
+            let result = await LocalJITService.shared.enableJIT(targetPID: getpid())
+            onServerMessage?(result.message)
+            return result.success
+        } else if(jitEnabler == .SideJITServer){
             guard
                   let sideJITServerAddress = groupUserDefaults.string(forKey: "LCSideJITServerAddress"),
                   let deviceUDID = groupUserDefaults.string(forKey: "LCDeviceUDID"),
