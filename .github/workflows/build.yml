@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # ---------------------------------------------------------
-      # Checkout
-      # ---------------------------------------------------------
+      # =========================================================
+      # CHECKOUT
+      # =========================================================
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -31,9 +31,9 @@ jobs:
           submodules: recursive
           lfs: true
 
-      # ---------------------------------------------------------
-      # Native dependencies
-      # ---------------------------------------------------------
+      # =========================================================
+      # NATIVE DEPENDENCIES
+      # =========================================================
       - name: Initialize native dependencies
         shell: bash
         run: |
@@ -42,7 +42,10 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --recursive --force
 
-          echo "Initial submodule status:"
+          echo "========================================"
+          echo "Submodule status"
+          echo "========================================"
+
           git submodule status --recursive || true
 
           # -----------------------------------------------------
@@ -58,9 +61,7 @@ jobs:
           if [ ! -f "$LITEHOOK_SOURCE" ] || \
              [ ! -f "$LITEHOOK_HEADER" ]; then
 
-            echo "LiteHook checkout is incomplete."
-            echo "Restoring pinned LiteHook revision:"
-            echo "$LITEHOOK_COMMIT"
+            echo "Restoring pinned LiteHook."
 
             rm -rf "$LITEHOOK_DIR"
 
@@ -84,9 +85,7 @@ jobs:
 
           if [ ! -f "$OPENSSL_FRAMEWORK/Info.plist" ]; then
 
-            echo "OpenSSL XCFramework is missing."
-            echo "Restoring pinned OpenSSL revision:"
-            echo "$OPENSSL_COMMIT"
+            echo "Restoring pinned OpenSSL."
 
             rm -rf "$OPENSSL_DIR"
 
@@ -99,94 +98,77 @@ jobs:
             git -C "$OPENSSL_DIR" checkout --detach "$OPENSSL_COMMIT"
           fi
 
-          echo
-          echo "========================================"
-          echo "Native dependency revisions"
-          echo "========================================"
-
-          echo "LiteHook:"
-          git -C "$LITEHOOK_DIR" rev-parse HEAD
-
-          echo
-          echo "OpenSSL:"
-          git -C "$OPENSSL_DIR" rev-parse HEAD
-
-      # ---------------------------------------------------------
-      # Verify native dependencies
-      # ---------------------------------------------------------
       - name: Verify native dependencies
         shell: bash
         run: |
           set -euo pipefail
 
-          LITEHOOK_DIR="$GITHUB_WORKSPACE/litehook"
-          OPENSSL_FRAMEWORK="$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework"
-
           echo "========================================"
           echo "Checking LiteHook"
           echo "========================================"
 
-          if [ ! -f "$LITEHOOK_DIR/src/litehook.c" ]; then
-            echo "::error::Missing LiteHook source:"
-            echo "$LITEHOOK_DIR/src/litehook.c"
+          test -f "$GITHUB_WORKSPACE/litehook/src/litehook.c"
+          test -f "$GITHUB_WORKSPACE/litehook/src/litehook.h"
 
-            find "$LITEHOOK_DIR" \
-              -maxdepth 5 \
-              -print \
-              2>/dev/null || true
-
-            exit 1
-          fi
-
-          if [ ! -f "$LITEHOOK_DIR/src/litehook.h" ]; then
-            echo "::error::Missing LiteHook header:"
-            echo "$LITEHOOK_DIR/src/litehook.h"
-            exit 1
-          fi
-
-          echo "LiteHook OK"
+          echo "LiteHook revision:"
+          git -C "$GITHUB_WORKSPACE/litehook" rev-parse HEAD
 
           echo
           echo "========================================"
           echo "Checking OpenSSL"
           echo "========================================"
 
-          if [ ! -f "$OPENSSL_FRAMEWORK/Info.plist" ]; then
-            echo "::error::Missing OpenSSL XCFramework:"
-            echo "$OPENSSL_FRAMEWORK"
+          test -f \
+            "$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework/Info.plist"
 
-            find "$GITHUB_WORKSPACE/OpenSSL" \
-              -maxdepth 5 \
-              -print \
-              2>/dev/null \
-              | head -300 || true
+          echo "OpenSSL revision:"
+          git -C "$GITHUB_WORKSPACE/OpenSSL" rev-parse HEAD
 
-            exit 1
-          fi
+          echo
+          echo "Native dependencies OK."
 
-          echo "OpenSSL XCFramework OK"
-
-      # ---------------------------------------------------------
-      # Xcode 26.2
-      # ---------------------------------------------------------
-      - name: Select Xcode
+      # =========================================================
+      # XCODE 26.2
+      # =========================================================
+      - name: Select Xcode 26.2
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: "26.2.0"
 
-      - name: Show Xcode information
+      - name: Verify Xcode toolchain
         shell: bash
         run: |
           set -euo pipefail
 
+          echo "========================================"
+          echo "Xcode"
+          echo "========================================"
+
           xcodebuild -version
 
           echo
+          echo "Developer directory:"
+          xcode-select -p
+
+          echo
+          echo "Swift:"
+          swift --version
+
+          echo
+          echo "SDKs:"
           xcodebuild -showsdks
 
-      # ---------------------------------------------------------
-      # Clean build state
-      # ---------------------------------------------------------
+          EXPECTED_XCODE="Xcode 26.2"
+
+          if ! xcodebuild -version | grep -q "$EXPECTED_XCODE"; then
+            echo "::error::Expected Xcode 26.2."
+            xcodebuild -version
+            exit 1
+          fi
+
+      # =========================================================
+      # CLEAN BUILD
+      # =========================================================
       - name: Prepare clean build directory
         shell: bash
         run: |
@@ -199,21 +181,18 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/build"
           mkdir -p "$GITHUB_WORKSPACE/build/StikJIT"
 
-      # ---------------------------------------------------------
-      # Build StikJIT
-      # ---------------------------------------------------------
-      - name: Build StikJIT XCFramework
+      # =========================================================
+      # BUILD STIKJIT WITH CURRENT TOOLCHAIN
+      # =========================================================
+      - name: Build StikJIT with Xcode 26.2
         shell: bash
         run: |
           set -euo pipefail
 
           SCRIPT="$GITHUB_WORKSPACE/Scripts/build_stikjit.sh"
-          STIKJIT_DIR="$GITHUB_WORKSPACE/build/StikJIT"
-          STIKJIT_FRAMEWORK="$STIKJIT_DIR/StikJIT.xcframework"
 
           if [ ! -f "$SCRIPT" ]; then
-            echo "::error::Missing StikJIT build script:"
-            echo "$SCRIPT"
+            echo "::error::Missing Scripts/build_stikjit.sh"
             exit 1
           fi
 
@@ -226,94 +205,57 @@ jobs:
           bash "$SCRIPT"
 
           echo
-          echo "========================================"
-          echo "Checking generated StikJIT"
-          echo "========================================"
+          echo "Searching for generated StikJIT..."
 
-          if [ ! -d "$STIKJIT_FRAMEWORK" ]; then
-            echo "::error::StikJIT.xcframework was not produced."
+          FOUND="$(
+            find "$GITHUB_WORKSPACE" \
+              -type d \
+              -name 'StikJIT.xcframework' \
+              -print \
+              -quit \
+              2>/dev/null || true
+          )"
+
+          if [ -z "$FOUND" ]; then
+            echo "::error::build_stikjit.sh did not produce StikJIT.xcframework."
 
             find "$GITHUB_WORKSPACE/build" \
-              -maxdepth 7 \
+              -maxdepth 8 \
               -print \
               2>/dev/null || true
 
             exit 1
           fi
 
-          if [ ! -f "$STIKJIT_FRAMEWORK/Info.plist" ]; then
-            echo "::error::StikJIT.xcframework is missing Info.plist."
+          echo "Generated framework:"
+          echo "$FOUND"
+
+          TARGET="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
+
+          rm -rf "$TARGET"
+          ditto "$FOUND" "$TARGET"
+
+          if [ ! -f "$TARGET/Info.plist" ]; then
+            echo "::error::Generated StikJIT XCFramework is invalid."
             exit 1
           fi
 
-          echo "StikJIT generated successfully:"
-          echo "$STIKJIT_FRAMEWORK"
-
-      # ---------------------------------------------------------
-      # CRITICAL:
-      #
-      # build/ is a PBXFileSystemSynchronizedRootGroup in the
-      # checked-in Xcode project.
-      #
-      # build_stikjit.sh creates:
-      #
-      #   build/StikJITSource/
-      #
-      # Xcode therefore discovers those generated source/resource
-      # files automatically AND processes the StikJIT XCFramework.
-      #
-      # That produces duplicate commands such as:
-      #
-      #   legacy.js
-      #   universal.js
-      #
-      # Remove ALL temporary StikJIT source/archive output and
-      # leave only the XCFramework explicitly referenced by the
-      # project.
-      # ---------------------------------------------------------
-      - name: Remove temporary StikJIT build sources
+      # =========================================================
+      # REMOVE SOURCE TREE THAT CONFLICTS WITH SYNCHRONIZED GROUP
+      # =========================================================
+      - name: Remove temporary StikJIT source tree
         shell: bash
         run: |
           set -euo pipefail
 
-          STIKJIT_DIR="$GITHUB_WORKSPACE/build/StikJIT"
-          STIKJIT_FRAMEWORK="$STIKJIT_DIR/StikJIT.xcframework"
+          STIKJIT="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
 
-          echo "========================================"
-          echo "Cleaning temporary StikJIT sources"
-          echo "========================================"
+          test -f "$STIKJIT/Info.plist"
 
-          if [ ! -f "$STIKJIT_FRAMEWORK/Info.plist" ]; then
-            echo "::error::StikJIT framework disappeared before cleanup."
-            exit 1
-          fi
-
-          # build_stikjit.sh creates this source checkout.
+          # The project synchronizes the build directory.
+          # Leaving StikJITSource here causes Xcode 26 to discover
+          # legacy.js/universal.js as additional resources.
           rm -rf "$GITHUB_WORKSPACE/build/StikJITSource"
-
-          # Remove any temporary archive/build products that the
-          # StikJIT script may have created inside build/.
-          find "$GITHUB_WORKSPACE/build" \
-            -maxdepth 2 \
-            -type d \
-            \( \
-              -name '*.xcarchive' \
-              -o -name 'SourcePackages' \
-            \) \
-            -prune \
-            -exec rm -rf {} + \
-            2>/dev/null || true
-
-          # The ONLY StikJIT item allowed to remain under build/
-          # is the XCFramework referenced by project.pbxproj.
-          echo
-          echo "Remaining build/StikJIT contents:"
-          find "$GITHUB_WORKSPACE/build/StikJIT" \
-            -maxdepth 3 \
-            -print
-
-          echo
-          echo "Checking that StikJITSource is gone..."
 
           if [ -d "$GITHUB_WORKSPACE/build/StikJITSource" ]; then
             echo "::error::StikJITSource still exists."
@@ -322,53 +264,137 @@ jobs:
 
           echo "Temporary StikJIT source removed."
 
-      # ---------------------------------------------------------
-      # Final StikJIT verification
-      # ---------------------------------------------------------
-      - name: Verify StikJIT before Xcode
+      # =========================================================
+      # PATCH ONLY THE GENERATED STIKJIT INTERFACE
+      #
+      # Xcode 26.2 reports:
+      #
+      # 'DDIPaths' is not a member type of enum 'StikJIT.StikJIT'
+      # 'DeveloperDiskImageService' is not a member type of enum
+      # 'StikJIT.StikJIT'
+      #
+      # This is the classic module-name/type-name collision pattern
+      # in a textual Swift interface.
+      #
+      # Do NOT blindly patch source files.
+      # Only patch generated .swiftinterface files if they contain
+      # the problematic qualified references.
+      # =========================================================
+      - name: Inspect and normalize StikJIT Swift interfaces
         shell: bash
         run: |
           set -euo pipefail
 
-          STIKJIT="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
+          XC="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
 
           echo "========================================"
-          echo "Final StikJIT verification"
+          echo "Inspecting StikJIT Swift interfaces"
           echo "========================================"
 
-          if [ ! -d "$STIKJIT" ]; then
-            echo "::error::StikJIT.xcframework does not exist."
-            exit 1
+          INTERFACES="$(
+            find "$XC" \
+              -type f \
+              -name '*.swiftinterface' \
+              -print
+          )"
+
+          if [ -z "$INTERFACES" ]; then
+            echo "No textual Swift interfaces found."
+            echo "The framework will use compiled Swift modules."
+            exit 0
           fi
 
-          if [ ! -f "$STIKJIT/Info.plist" ]; then
-            echo "::error::StikJIT.xcframework Info.plist is missing."
-            exit 1
-          fi
+          echo "$INTERFACES"
 
-          if [ -d "$GITHUB_WORKSPACE/build/StikJITSource" ]; then
-            echo "::error::Temporary StikJITSource directory remains."
-            exit 1
-          fi
+          while IFS= read -r FILE; do
+            [ -n "$FILE" ] || continue
 
-          echo "StikJIT:"
-          echo "$STIKJIT"
+            echo
+            echo "Checking:"
+            echo "$FILE"
 
-          echo
-          echo "XCFramework metadata:"
-          /usr/libexec/PlistBuddy \
-            -c 'Print :' \
-            "$STIKJIT/Info.plist"
+            if grep -nE \
+              'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
+              "$FILE" \
+              >/dev/null 2>&1; then
 
-          echo
-          echo "Final build/StikJIT contents:"
-          find "$GITHUB_WORKSPACE/build/StikJIT" \
-            -maxdepth 4 \
+              echo "Found problematic StikJIT-qualified declarations."
+
+              # Preserve a backup for diagnostics.
+              cp "$FILE" "$FILE.before-delvek-patch"
+
+              # The framework's module and type share the name
+              # StikJIT. Remove only the redundant module qualifier
+              # from generated interface references.
+              sed -i '' \
+                -e 's/StikJIT\.DDIPaths/DDIPaths/g' \
+                -e 's/StikJIT\.DeveloperDiskImageService/DeveloperDiskImageService/g' \
+                -e 's/StikJIT\.StikJIT/StikJIT/g' \
+                "$FILE"
+
+              echo "Interface normalized:"
+              grep -nE \
+                'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
+                "$FILE" \
+                || true
+            fi
+
+          done <<< "$INTERFACES"
+
+      # =========================================================
+      # PREVENT XCODE 26 EXPLICIT MODULES FROM REUSING A STALE
+      # PREBUILT INTERFACE
+      # =========================================================
+      - name: Validate StikJIT module layout
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          XC="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
+
+          echo "========================================"
+          echo "StikJIT XCFramework layout"
+          echo "========================================"
+
+          find "$XC" \
+            -maxdepth 5 \
             -print
 
-      # ---------------------------------------------------------
-      # Swift packages
-      # ---------------------------------------------------------
+          echo
+          echo "Checking module directories..."
+
+          find "$XC" \
+            -type d \
+            -path '*/Modules/StikJIT.swiftmodule' \
+            -print \
+            || true
+
+          echo
+          echo "Checking problematic interface references..."
+
+          if grep -R \
+            -nE \
+            'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
+            "$XC" \
+            --include='*.swiftinterface' \
+            >/dev/null 2>&1; then
+
+            echo "::error::Problematic StikJIT module-qualified references remain."
+            grep -R \
+              -nE \
+              'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
+              "$XC" \
+              --include='*.swiftinterface' \
+              || true
+
+            exit 1
+          fi
+
+          echo "StikJIT interface validation passed."
+
+      # =========================================================
+      # RESOLVE PACKAGES
+      # =========================================================
       - name: Resolve Swift packages
         shell: bash
         run: |
@@ -379,9 +405,9 @@ jobs:
             -project "$GITHUB_WORKSPACE/$PROJECT" \
             -scheme "$SCHEME"
 
-      # ---------------------------------------------------------
-      # Build settings
-      # ---------------------------------------------------------
+      # =========================================================
+      # BUILD SETTINGS
+      # =========================================================
       - name: Inspect build settings
         shell: bash
         run: |
@@ -396,13 +422,20 @@ jobs:
             > "$GITHUB_WORKSPACE/build/build-settings.txt"
 
           grep -E \
-            'PRODUCT_NAME|FULL_PRODUCT_NAME|TARGET_BUILD_DIR|WRAPPER_NAME|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN' \
+            'PRODUCT_NAME|FULL_PRODUCT_NAME|TARGET_BUILD_DIR|WRAPPER_NAME|PRODUCT_BUNDLE_IDENTIFIER|SWIFT_VERSION|SWIFT_ENABLE_EXPLICIT_MODULES|BUILD_LIBRARY_FOR_DISTRIBUTION' \
             "$GITHUB_WORKSPACE/build/build-settings.txt" \
             || true
 
-      # ---------------------------------------------------------
-      # Build unsigned DELvEK
-      # ---------------------------------------------------------
+      # =========================================================
+      # BUILD
+      #
+      # Xcode 26 makes explicit Swift modules the default.
+      # Disable it for this build because StikJIT's generated
+      # textual module is the failing dependency.
+      #
+      # This does not change the source or framework binary.
+      # It changes how Xcode constructs module dependencies.
+      # =========================================================
       - name: Build unsigned DELvEK
         shell: bash
         run: |
@@ -420,15 +453,16 @@ jobs:
             -configuration "$CONFIGURATION" \
             -destination "generic/platform=iOS" \
             -derivedDataPath "$DERIVED_DATA" \
+            SWIFT_ENABLE_EXPLICIT_MODULES=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$LOG"
 
-      # ---------------------------------------------------------
-      # Diagnostics
-      # ---------------------------------------------------------
+      # =========================================================
+      # DIAGNOSTICS
+      # =========================================================
       - name: Upload Xcode diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -437,11 +471,12 @@ jobs:
           path: |
             build/xcodebuild.log
             build/build-settings.txt
+            build/StikJIT
           if-no-files-found: warn
 
-      # ---------------------------------------------------------
-      # Locate DELvEK.app
-      # ---------------------------------------------------------
+      # =========================================================
+      # LOCATE APP
+      # =========================================================
       - name: Locate DELvEK.app
         shell: bash
         run: |
@@ -467,7 +502,7 @@ jobs:
             echo "::error::DELvEK.app was not produced."
 
             echo
-            echo "Available application products:"
+            echo "Available .app products:"
             find "$PRODUCTS" \
               -type d \
               -name '*.app' \
@@ -483,9 +518,9 @@ jobs:
           echo "DELvEK.app:"
           echo "$APP"
 
-      # ---------------------------------------------------------
-      # Package unsigned IPA
-      # ---------------------------------------------------------
+      # =========================================================
+      # PACKAGE IPA
+      # =========================================================
       - name: Package unsigned IPA
         shell: bash
         run: |
@@ -518,9 +553,9 @@ jobs:
           echo "Created unsigned IPA:"
           ls -lh "$IPA"
 
-      # ---------------------------------------------------------
-      # Verify unsigned IPA
-      # ---------------------------------------------------------
+      # =========================================================
+      # VERIFY IPA
+      # =========================================================
       - name: Verify unsigned IPA
         shell: bash
         run: |
@@ -568,7 +603,7 @@ jobs:
 
           echo
           echo "========================================"
-          echo "Signature verification"
+          echo "Signature directories"
           echo "========================================"
 
           SIGNATURE_DIRS="$(
@@ -579,7 +614,7 @@ jobs:
           )"
 
           if [ -n "$SIGNATURE_DIRS" ]; then
-            echo "::error::Found _CodeSignature directories:"
+            echo "::error::Unsigned artifact contains _CodeSignature:"
             echo "$SIGNATURE_DIRS"
             exit 1
           fi
@@ -606,9 +641,9 @@ jobs:
             "$IPA" \
             | head -100
 
-      # ---------------------------------------------------------
-      # Checksum
-      # ---------------------------------------------------------
+      # =========================================================
+      # CHECKSUM
+      # =========================================================
       - name: Generate artifact checksum
         shell: bash
         run: |
@@ -617,11 +652,12 @@ jobs:
           shasum \
             -a 256 \
             "$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa" \
-            | tee "$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa.sha256"
+            | tee \
+              "$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa.sha256"
 
-      # ---------------------------------------------------------
-      # Upload artifact
-      # ---------------------------------------------------------
+      # =========================================================
+      # ARTIFACT
+      # =========================================================
       - name: Upload unsigned DELvEK artifact
         uses: actions/upload-artifact@v4
         with:
