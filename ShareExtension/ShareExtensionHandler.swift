@@ -106,16 +106,6 @@ final class ShareExtensionHandler: UIViewController {
             return
         }
 
-        // Current StikJIT API:
-        //
-        // DDIPaths(
-        //     imagePath: String,
-        //     trustcachePath: String,
-        //     manifestPath: String,
-        //     cryptexInfoPath: String? = nil,
-        //     rootHashPath: String? = nil
-        // )
-
         let paths: DDIPaths
 
         let ddiDictionary: [String: Any]?
@@ -134,7 +124,6 @@ final class ShareExtensionHandler: UIViewController {
             return
         }
 
-        // Accept the current payload names and the legacy names.
         let imagePath =
             (ddi["imagePath"] as? String) ??
             (ddi["developerDiskImagePath"] as? String)
@@ -164,8 +153,10 @@ final class ShareExtensionHandler: UIViewController {
             imagePath: imagePath,
             trustcachePath: trustcachePath,
             manifestPath: manifestPath,
-            cryptexInfoPath: ddi["cryptexInfoPath"] as? String,
-            rootHashPath: ddi["rootHashPath"] as? String
+            cryptexInfoPath:
+                (ddi["cryptexInfoPath"] as? String) ?? "",
+            rootHashPath:
+                (ddi["rootHashPath"] as? String) ?? ""
         )
 
         let temporaryDirectory =
@@ -215,19 +206,15 @@ final class ShareExtensionHandler: UIViewController {
                 paths.manifestPath
             )
 
-            if let cryptexInfoPath = paths.cryptexInfoPath {
-                NSLog(
-                    "[DELvEK JIT] Cryptex info: %@",
-                    cryptexInfoPath
-                )
-            }
+            NSLog(
+                "[DELvEK JIT] Cryptex info: %@",
+                paths.cryptexInfoPath
+            )
 
-            if let rootHashPath = paths.rootHashPath {
-                NSLog(
-                    "[DELvEK JIT] Root hash: %@",
-                    rootHashPath
-                )
-            }
+            NSLog(
+                "[DELvEK JIT] Root hash: %@",
+                paths.rootHashPath
+            )
 
             enableJIT(
                 pid: pid,
