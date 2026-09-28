@@ -98,6 +98,9 @@ jobs:
             git -C "$OPENSSL_DIR" checkout --detach "$OPENSSL_COMMIT"
           fi
 
+      # =========================================================
+      # VERIFY NATIVE DEPENDENCIES
+      # =========================================================
       - name: Verify native dependencies
         shell: bash
         run: |
@@ -107,8 +110,27 @@ jobs:
           echo "Checking LiteHook"
           echo "========================================"
 
-          test -f "$GITHUB_WORKSPACE/litehook/src/litehook.c"
-          test -f "$GITHUB_WORKSPACE/litehook/src/litehook.h"
+          if [ ! -f "$GITHUB_WORKSPACE/litehook/src/litehook.c" ]; then
+            echo "::error::Missing LiteHook source:"
+            echo "$GITHUB_WORKSPACE/litehook/src/litehook.c"
+            find "$GITHUB_WORKSPACE/litehook" \
+              -maxdepth 5 \
+              -print \
+              2>/dev/null || true
+            exit 1
+          fi
+
+          if [ ! -f "$GITHUB_WORKSPACE/litehook/src/litehook.h" ]; then
+            echo "::error::Missing LiteHook header:"
+            echo "$GITHUB_WORKSPACE/litehook/src/litehook.h"
+            exit 1
+          fi
+
+          echo "LiteHook source:"
+          echo "$GITHUB_WORKSPACE/litehook/src/litehook.c"
+
+          echo "LiteHook header:"
+          echo "$GITHUB_WORKSPACE/litehook/src/litehook.h"
 
           echo "LiteHook revision:"
           git -C "$GITHUB_WORKSPACE/litehook" rev-parse HEAD
@@ -118,8 +140,23 @@ jobs:
           echo "Checking OpenSSL"
           echo "========================================"
 
-          test -f \
-            "$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework/Info.plist"
+          OPENSSL_FRAMEWORK="$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework"
+
+          if [ ! -f "$OPENSSL_FRAMEWORK/Info.plist" ]; then
+            echo "::error::Missing OpenSSL XCFramework:"
+            echo "$OPENSSL_FRAMEWORK"
+
+            find "$GITHUB_WORKSPACE/OpenSSL" \
+              -maxdepth 5 \
+              -print \
+              2>/dev/null \
+              | head -300 || true
+
+            exit 1
+          fi
+
+          echo "OpenSSL XCFramework:"
+          echo "$OPENSSL_FRAMEWORK"
 
           echo "OpenSSL revision:"
           git -C "$GITHUB_WORKSPACE/OpenSSL" rev-parse HEAD
@@ -135,6 +172,18 @@ jobs:
         with:
           xcode-version: "26.2.0"
 
+      # =========================================================
+      # VERIFY XCODE
+      #
+      # IMPORTANT:
+      # Do NOT pipe xcodebuild -version directly into grep -q.
+      #
+      # With pipefail enabled, grep -q can close the pipe early,
+      # causing xcodebuild to receive SIGPIPE and report:
+      #
+      # NSFileHandleOperationException: Broken pipe
+      # Abort trap: 6
+      # =========================================================
       - name: Verify Xcode toolchain
         shell: bash
         run: |
@@ -144,7 +193,9 @@ jobs:
           echo "Xcode"
           echo "========================================"
 
-          xcodebuild -version
+          XCODE_VERSION="$(xcodebuild -version)"
+
+          printf '%s\n' "$XCODE_VERSION"
 
           echo
           echo "Developer directory:"
@@ -160,11 +211,16 @@ jobs:
 
           EXPECTED_XCODE="Xcode 26.2"
 
-          if ! xcodebuild -version | grep -q "$EXPECTED_XCODE"; then
+          if [[ "$XCODE_VERSION" != *"$EXPECTED_XCODE"* ]]; then
             echo "::error::Expected Xcode 26.2."
-            xcodebuild -version
+            echo
+            echo "Actual Xcode:"
+            printf '%s\n' "$XCODE_VERSION"
             exit 1
           fi
+
+          echo
+          echo "Xcode 26.2 verified successfully."
 
       # =========================================================
       # CLEAN BUILD
@@ -182,7 +238,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/build/StikJIT"
 
       # =========================================================
-      # BUILD STIKJIT WITH CURRENT TOOLCHAIN
+      # BUILD STIKJIT WITH XCODE 26.2
       # =========================================================
       - name: Build StikJIT with Xcode 26.2
         shell: bash
@@ -192,7 +248,8 @@ jobs:
           SCRIPT="$GITHUB_WORKSPACE/Scripts/build_stikjit.sh"
 
           if [ ! -f "$SCRIPT" ]; then
-            echo "::error::Missing Scripts/build_stikjit.sh"
+            echo "::error::Missing StikJIT build script:"
+            echo "$SCRIPT"
             exit 1
           fi
 
@@ -232,8 +289,10 @@ jobs:
 
           TARGET="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
 
-          rm -rf "$TARGET"
-          ditto "$FOUND" "$TARGET"
+          if [ "$FOUND" != "$TARGET" ]; then
+            rm -rf "$TARGET"
+            ditto "$FOUND" "$TARGET"
+          fi
 
           if [ ! -f "$TARGET/Info.plist" ]; then
             echo "::error::Generated StikJIT XCFramework is invalid."
@@ -241,7 +300,7 @@ jobs:
           fi
 
       # =========================================================
-      # REMOVE SOURCE TREE THAT CONFLICTS WITH SYNCHRONIZED GROUP
+      # REMOVE TEMPORARY STIKJIT SOURCE
       # =========================================================
       - name: Remove temporary StikJIT source tree
         shell: bash
@@ -250,11 +309,11 @@ jobs:
 
           STIKJIT="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
 
-          test -f "$STIKJIT/Info.plist"
+          if [ ! -f "$STIKJIT/Info.plist" ]; then
+            echo "::error::StikJIT XCFramework is missing."
+            exit 1
+          fi
 
-          # The project synchronizes the build directory.
-          # Leaving StikJITSource here causes Xcode 26 to discover
-          # legacy.js/universal.js as additional resources.
           rm -rf "$GITHUB_WORKSPACE/build/StikJITSource"
 
           if [ -d "$GITHUB_WORKSPACE/build/StikJITSource" ]; then
@@ -265,22 +324,9 @@ jobs:
           echo "Temporary StikJIT source removed."
 
       # =========================================================
-      # PATCH ONLY THE GENERATED STIKJIT INTERFACE
-      #
-      # Xcode 26.2 reports:
-      #
-      # 'DDIPaths' is not a member type of enum 'StikJIT.StikJIT'
-      # 'DeveloperDiskImageService' is not a member type of enum
-      # 'StikJIT.StikJIT'
-      #
-      # This is the classic module-name/type-name collision pattern
-      # in a textual Swift interface.
-      #
-      # Do NOT blindly patch source files.
-      # Only patch generated .swiftinterface files if they contain
-      # the problematic qualified references.
+      # INSPECT / NORMALIZE STIKJIT INTERFACES
       # =========================================================
-      - name: Inspect and normalize StikJIT Swift interfaces
+      - name: Inspect StikJIT Swift interfaces
         shell: bash
         run: |
           set -euo pipefail
@@ -295,16 +341,16 @@ jobs:
             find "$XC" \
               -type f \
               -name '*.swiftinterface' \
-              -print
+              -print \
+              2>/dev/null || true
           )"
 
           if [ -z "$INTERFACES" ]; then
             echo "No textual Swift interfaces found."
-            echo "The framework will use compiled Swift modules."
             exit 0
           fi
 
-          echo "$INTERFACES"
+          printf '%s\n' "$INTERFACES"
 
           while IFS= read -r FILE; do
             [ -n "$FILE" ] || continue
@@ -318,34 +364,23 @@ jobs:
               "$FILE" \
               >/dev/null 2>&1; then
 
-              echo "Found problematic StikJIT-qualified declarations."
+              echo "Normalizing problematic StikJIT references."
 
-              # Preserve a backup for diagnostics.
-              cp "$FILE" "$FILE.before-delvek-patch"
+              cp "$FILE" "$FILE.before-normalization"
 
-              # The framework's module and type share the name
-              # StikJIT. Remove only the redundant module qualifier
-              # from generated interface references.
               sed -i '' \
                 -e 's/StikJIT\.DDIPaths/DDIPaths/g' \
                 -e 's/StikJIT\.DeveloperDiskImageService/DeveloperDiskImageService/g' \
                 -e 's/StikJIT\.StikJIT/StikJIT/g' \
                 "$FILE"
-
-              echo "Interface normalized:"
-              grep -nE \
-                'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
-                "$FILE" \
-                || true
             fi
 
           done <<< "$INTERFACES"
 
       # =========================================================
-      # PREVENT XCODE 26 EXPLICIT MODULES FROM REUSING A STALE
-      # PREBUILT INTERFACE
+      # VALIDATE STIKJIT
       # =========================================================
-      - name: Validate StikJIT module layout
+      - name: Validate StikJIT module
         shell: bash
         run: |
           set -euo pipefail
@@ -353,16 +388,14 @@ jobs:
           XC="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
 
           echo "========================================"
-          echo "StikJIT XCFramework layout"
+          echo "Validating StikJIT"
           echo "========================================"
 
-          find "$XC" \
-            -maxdepth 5 \
-            -print
+          test -d "$XC"
+          test -f "$XC/Info.plist"
 
           echo
-          echo "Checking module directories..."
-
+          echo "Module directories:"
           find "$XC" \
             -type d \
             -path '*/Modules/StikJIT.swiftmodule' \
@@ -379,7 +412,8 @@ jobs:
             --include='*.swiftinterface' \
             >/dev/null 2>&1; then
 
-            echo "::error::Problematic StikJIT module-qualified references remain."
+            echo "::error::Invalid StikJIT-qualified references remain."
+
             grep -R \
               -nE \
               'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
@@ -390,10 +424,10 @@ jobs:
             exit 1
           fi
 
-          echo "StikJIT interface validation passed."
+          echo "StikJIT validation passed."
 
       # =========================================================
-      # RESOLVE PACKAGES
+      # SWIFT PACKAGES
       # =========================================================
       - name: Resolve Swift packages
         shell: bash
@@ -427,14 +461,7 @@ jobs:
             || true
 
       # =========================================================
-      # BUILD
-      #
-      # Xcode 26 makes explicit Swift modules the default.
-      # Disable it for this build because StikJIT's generated
-      # textual module is the failing dependency.
-      #
-      # This does not change the source or framework binary.
-      # It changes how Xcode constructs module dependencies.
+      # BUILD UNSIGNED DELVEK
       # =========================================================
       - name: Build unsigned DELvEK
         shell: bash
@@ -501,8 +528,6 @@ jobs:
           if [ -z "$APP" ]; then
             echo "::error::DELvEK.app was not produced."
 
-            echo
-            echo "Available .app products:"
             find "$PRODUCTS" \
               -type d \
               -name '*.app' \
