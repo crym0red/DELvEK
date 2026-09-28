@@ -16,9 +16,6 @@ jobs:
     name: Build unsigned DELvEK
     runs-on: macos-latest
     steps:
-      # ---------------------------------------------------------
-      # Checkout
-      # ---------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -26,7 +23,7 @@ jobs:
           submodules: recursive
           lfs: true
       # ---------------------------------------------------------
-      # Native submodules
+      # Native dependencies
       # ---------------------------------------------------------
       - name: Initialize native submodules
         shell: bash
@@ -34,13 +31,30 @@ jobs:
           set -euo pipefail
           git submodule sync --recursive
           git submodule update --init --recursive --force
-          echo "========================================"
-          echo "Submodule status"
-          echo "========================================"
-          git submodule status --recursive
-      # ---------------------------------------------------------
-      # Verify LiteHook / OpenSSL
-      # ---------------------------------------------------------
+          echo "Initial submodule status:"
+          git submodule status --recursive || true
+          # Some DELvEK repository revisions do not populate the
+          # LiteHook working tree correctly. Restore the exact
+          # revision expected by the project when necessary.
+          LITEHOOK_DIR="$GITHUB_WORKSPACE/litehook"
+          LITEHOOK_COMMIT="a7e9f599d7f0b3d77008ad62bf10cb10dab6eca9"
+          LITEHOOK_REPO="https://github.com/LiveContainer/litehook.git"
+          if [ ! -f "$LITEHOOK_DIR/src/litehook.c" ] || \
+             [ ! -f "$LITEHOOK_DIR/src/litehook.h" ]; then
+            echo "LiteHook checkout is incomplete."
+            echo "Restoring pinned LiteHook revision:"
+            echo "$LITEHOOK_COMMIT"
+            rm -rf "$LITEHOOK_DIR"
+            git clone \
+              --filter=blob:none \
+              --no-checkout \
+              "$LITEHOOK_REPO" \
+              "$LITEHOOK_DIR"
+            git -C "$LITEHOOK_DIR" checkout --detach "$LITEHOOK_COMMIT"
+          fi
+          echo
+          echo "Final submodule status:"
+          git submodule status --recursive || true
       - name: Verify native dependencies
         shell: bash
         run: |
@@ -50,11 +64,16 @@ jobs:
           LITEHOOK_HEADER="$LITEHOOK_DIR/src/litehook.h"
           OPENSSL_DIR="$GITHUB_WORKSPACE/OpenSSL"
           OPENSSL_FRAMEWORK="$OPENSSL_DIR/Frameworks/OpenSSL.xcframework"
-          echo "Checking LiteHook..."
+          echo "========================================"
+          echo "Checking LiteHook"
+          echo "========================================"
           if [ ! -f "$LITEHOOK_SOURCE" ]; then
             echo "::error::Missing LiteHook source:"
             echo "$LITEHOOK_SOURCE"
-            find "$LITEHOOK_DIR" -maxdepth 4 -print 2>/dev/null || true
+            find "$LITEHOOK_DIR" \
+              -maxdepth 5 \
+              -print \
+              2>/dev/null || true
             exit 1
           fi
           if [ ! -f "$LITEHOOK_HEADER" ]; then
@@ -62,22 +81,30 @@ jobs:
             echo "$LITEHOOK_HEADER"
             exit 1
           fi
+          echo "LiteHook source: $LITEHOOK_SOURCE"
+          echo "LiteHook header: $LITEHOOK_HEADER"
           echo "LiteHook revision:"
           git -C "$LITEHOOK_DIR" rev-parse HEAD
           echo
-          echo "Checking OpenSSL..."
+          echo "========================================"
+          echo "Checking OpenSSL"
+          echo "========================================"
           if [ ! -f "$OPENSSL_FRAMEWORK/Info.plist" ]; then
             echo "::error::Missing OpenSSL XCFramework:"
             echo "$OPENSSL_FRAMEWORK"
-            echo
-            echo "OpenSSL contents:"
-            find "$OPENSSL_DIR" -maxdepth 5 -print 2>/dev/null | head -300 || true
+            find "$OPENSSL_DIR" \
+              -maxdepth 5 \
+              -print \
+              2>/dev/null \
+              | head -300 || true
             exit 1
           fi
+          echo "OpenSSL XCFramework:"
+          echo "$OPENSSL_FRAMEWORK"
           echo "OpenSSL revision:"
           git -C "$OPENSSL_DIR" rev-parse HEAD
           echo
-          echo "Native dependencies verified."
+          echo "Native dependencies verified successfully."
       # ---------------------------------------------------------
       # Xcode
       # ---------------------------------------------------------
@@ -89,28 +116,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "========================================"
-          echo "Xcode"
-          echo "========================================"
           xcodebuild -version
           echo
-          echo "========================================"
-          echo "iOS SDKs"
-          echo "========================================"
           xcodebuild -showsdks
       # ---------------------------------------------------------
-      # Build pinned StikJIT XCFramework
+      # StikJIT
       # ---------------------------------------------------------
       - name: Build pinned StikJIT XCFramework
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -x "$GITHUB_WORKSPACE/Scripts/build_stikjit.sh" ]; then
-            echo "::error::Scripts/build_stikjit.sh is missing or not executable."
-            ls -la "$GITHUB_WORKSPACE/Scripts" || true
+          SCRIPT="$GITHUB_WORKSPACE/Scripts/build_stikjit.sh"
+          if [ ! -f "$SCRIPT" ]; then
+            echo "::error::Missing Scripts/build_stikjit.sh"
             exit 1
           fi
-          bash "$GITHUB_WORKSPACE/Scripts/build_stikjit.sh"
+          bash "$SCRIPT"
       # ---------------------------------------------------------
       # Clean build state
       # ---------------------------------------------------------
@@ -123,7 +144,7 @@ jobs:
           rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
           mkdir -p "$GITHUB_WORKSPACE/build"
       # ---------------------------------------------------------
-      # Resolve Swift packages
+      # Swift packages
       # ---------------------------------------------------------
       - name: Resolve Swift packages
         shell: bash
@@ -134,7 +155,7 @@ jobs:
             -project "$GITHUB_WORKSPACE/$PROJECT" \
             -scheme "$SCHEME"
       # ---------------------------------------------------------
-      # Inspect build settings
+      # Build settings
       # ---------------------------------------------------------
       - name: Inspect build settings
         shell: bash
@@ -147,13 +168,12 @@ jobs:
             -sdk iphoneos \
             -showBuildSettings \
             > "$GITHUB_WORKSPACE/build/build-settings.txt"
-          echo "Relevant build settings:"
           grep -E \
             'PRODUCT_NAME|FULL_PRODUCT_NAME|TARGET_BUILD_DIR|WRAPPER_NAME|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN' \
             "$GITHUB_WORKSPACE/build/build-settings.txt" \
             || true
       # ---------------------------------------------------------
-      # Build
+      # Build unsigned DELvEK
       # ---------------------------------------------------------
       - name: Build unsigned DELvEK
         shell: bash
@@ -207,7 +227,7 @@ jobs:
           if [ -z "$APP" ]; then
             echo "::error::DELvEK.app was not produced."
             echo
-            echo "Available application products:"
+            echo "Available .app products:"
             find "$PRODUCTS" \
               -type d \
               -name '*.app' \
@@ -215,8 +235,9 @@ jobs:
               || true
             exit 1
           fi
-          printf '%s\n' "$APP" > "$GITHUB_WORKSPACE/build/app-path.txt"
-          echo "Found:"
+          printf '%s\n' "$APP" \
+            > "$GITHUB_WORKSPACE/build/app-path.txt"
+          echo "DELvEK.app:"
           echo "$APP"
       # ---------------------------------------------------------
       # Package IPA
@@ -241,12 +262,10 @@ jobs:
             "$IPA" \
             Payload
           rm -rf "$PAYLOAD"
-          echo "========================================"
-          echo "Unsigned IPA"
-          echo "========================================"
+          echo "Created:"
           ls -lh "$IPA"
       # ---------------------------------------------------------
-      # Verify artifact
+      # Verify unsigned artifact
       # ---------------------------------------------------------
       - name: Verify unsigned IPA
         shell: bash
@@ -285,14 +304,14 @@ jobs:
             || true
           echo
           echo "========================================"
-          echo "Unsigned verification"
+          echo "Signature verification"
           echo "========================================"
           SIGNATURE_DIRS="$(find "$APP" \
             -type d \
             -name '_CodeSignature' \
             -print)"
           if [ -n "$SIGNATURE_DIRS" ]; then
-            echo "::error::Found code-signature directories:"
+            echo "::error::Found _CodeSignature directories:"
             echo "$SIGNATURE_DIRS"
             exit 1
           fi
@@ -314,7 +333,7 @@ jobs:
             "$IPA" \
             | head -100
       # ---------------------------------------------------------
-      # SHA-256
+      # Checksum
       # ---------------------------------------------------------
       - name: Generate artifact checksum
         shell: bash
@@ -325,7 +344,7 @@ jobs:
             "$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa" \
             | tee "$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa.sha256"
       # ---------------------------------------------------------
-      # Upload final artifact
+      # Artifact
       # ---------------------------------------------------------
       - name: Upload unsigned DELvEK artifact
         uses: actions/upload-artifact@v4
