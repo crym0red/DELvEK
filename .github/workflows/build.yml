@@ -31,7 +31,7 @@ jobs:
       # ---------------------------------------------------------
       # Native dependencies
       # ---------------------------------------------------------
-      - name: Initialize native submodules
+      - name: Initialize native dependencies
         shell: bash
         run: |
           set -euo pipefail
@@ -42,12 +42,18 @@ jobs:
           echo "Initial submodule status:"
           git submodule status --recursive || true
 
+          # -----------------------------------------------------
+          # LiteHook
+          # -----------------------------------------------------
           LITEHOOK_DIR="$GITHUB_WORKSPACE/litehook"
-          LITEHOOK_COMMIT="a7e9f599d7f0b3d77008ad62bf10cb10dab6eca9"
-          LITEHOOK_REPO="https://github.com/LiveContainer/litehook.git"
+          LITEHOOK_SOURCE="$LITEHOOK_DIR/src/litehook.c"
+          LITEHOOK_HEADER="$LITEHOOK_DIR/src/litehook.h"
 
-          if [ ! -f "$LITEHOOK_DIR/src/litehook.c" ] || \
-             [ ! -f "$LITEHOOK_DIR/src/litehook.h" ]; then
+          LITEHOOK_REPO="https://github.com/LiveContainer/litehook.git"
+          LITEHOOK_COMMIT="a7e9f599d7f0b3d77008ad62bf10cb10dab6eca9"
+
+          if [ ! -f "$LITEHOOK_SOURCE" ] || \
+             [ ! -f "$LITEHOOK_HEADER" ]; then
 
             echo "LiteHook checkout is incomplete."
             echo "Restoring pinned LiteHook revision:"
@@ -64,8 +70,44 @@ jobs:
             git -C "$LITEHOOK_DIR" checkout --detach "$LITEHOOK_COMMIT"
           fi
 
+          # -----------------------------------------------------
+          # OpenSSL
+          # -----------------------------------------------------
+          OPENSSL_DIR="$GITHUB_WORKSPACE/OpenSSL"
+          OPENSSL_FRAMEWORK="$OPENSSL_DIR/Frameworks/OpenSSL.xcframework"
+
+          OPENSSL_REPO="https://github.com/krzyzanowskim/OpenSSL.git"
+          OPENSSL_COMMIT="623c84da314e85363236507ca38a4bde65df21c3"
+
+          if [ ! -f "$OPENSSL_FRAMEWORK/Info.plist" ]; then
+
+            echo "OpenSSL XCFramework is missing."
+            echo "Restoring pinned OpenSSL revision:"
+            echo "$OPENSSL_COMMIT"
+
+            rm -rf "$OPENSSL_DIR"
+
+            git clone \
+              --filter=blob:none \
+              --no-checkout \
+              "$OPENSSL_REPO" \
+              "$OPENSSL_DIR"
+
+            git -C "$OPENSSL_DIR" checkout --detach "$OPENSSL_COMMIT"
+          fi
+
           echo
-          echo "Final submodule status:"
+          echo "Final native dependency status:"
+          echo
+
+          echo "LiteHook:"
+          git -C "$LITEHOOK_DIR" rev-parse HEAD
+
+          echo
+          echo "OpenSSL:"
+          git -C "$OPENSSL_DIR" rev-parse HEAD
+
+          echo
           git submodule status --recursive || true
 
       - name: Verify native dependencies
@@ -133,7 +175,9 @@ jobs:
           git -C "$OPENSSL_DIR" rev-parse HEAD
 
           echo
-          echo "Native dependencies verified successfully."
+          echo "========================================"
+          echo "Native dependencies verified"
+          echo "========================================"
 
       # ---------------------------------------------------------
       # Xcode 26.2.0
