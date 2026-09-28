@@ -6,7 +6,6 @@ final class ShareExtensionHandler: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
         handleExtensionContext()
     }
 
@@ -107,32 +106,67 @@ final class ShareExtensionHandler: UIViewController {
             return
         }
 
+        // Current StikJIT API:
+        //
+        // DDIPaths(
+        //     imagePath: String,
+        //     trustcachePath: String,
+        //     manifestPath: String,
+        //     cryptexInfoPath: String? = nil,
+        //     rootHashPath: String? = nil
+        // )
+
         let paths: DDIPaths
 
-        if let ddiValue = values["ddiPaths"] as? [String: String] {
-            paths = DDIPaths(
-                developerDiskImagePath:
-                    ddiValue["developerDiskImagePath"] ?? "",
-                developerDiskImageTrustCachePath:
-                    ddiValue["developerDiskImageTrustCachePath"] ?? ""
-            )
-        } else if let ddiValue = values["ddiPaths"] as? NSDictionary {
-            let developerDiskImagePath =
-                ddiValue["developerDiskImagePath"] as? String ?? ""
+        let ddiDictionary: [String: Any]?
 
-            let developerDiskImageTrustCachePath =
-                ddiValue["developerDiskImageTrustCachePath"] as? String ?? ""
-
-            paths = DDIPaths(
-                developerDiskImagePath: developerDiskImagePath,
-                developerDiskImageTrustCachePath:
-                    developerDiskImageTrustCachePath
-            )
+        if let dictionary = values["ddiPaths"] as? [String: Any] {
+            ddiDictionary = dictionary
+        } else if let dictionary = values["ddiPaths"] as? NSDictionary {
+            ddiDictionary = dictionary as? [String: Any]
         } else {
+            ddiDictionary = nil
+        }
+
+        guard let ddi = ddiDictionary else {
             NSLog("[DELvEK JIT] Missing DDI paths.")
             finish()
             return
         }
+
+        // Accept the current payload names and the legacy names.
+        let imagePath =
+            (ddi["imagePath"] as? String) ??
+            (ddi["developerDiskImagePath"] as? String)
+
+        let trustcachePath =
+            (ddi["trustcachePath"] as? String) ??
+            (ddi["developerDiskImageTrustCachePath"] as? String)
+
+        let manifestPath =
+            (ddi["manifestPath"] as? String) ??
+            (ddi["developerDiskImageManifestPath"] as? String)
+
+        guard
+            let imagePath,
+            !imagePath.isEmpty,
+            let trustcachePath,
+            !trustcachePath.isEmpty,
+            let manifestPath,
+            !manifestPath.isEmpty
+        else {
+            NSLog("[DELvEK JIT] Incomplete DDI paths.")
+            finish()
+            return
+        }
+
+        paths = DDIPaths(
+            imagePath: imagePath,
+            trustcachePath: trustcachePath,
+            manifestPath: manifestPath,
+            cryptexInfoPath: ddi["cryptexInfoPath"] as? String,
+            rootHashPath: ddi["rootHashPath"] as? String
+        )
 
         let temporaryDirectory =
             FileManager.default.temporaryDirectory
@@ -154,9 +188,7 @@ final class ShareExtensionHandler: UIViewController {
 
             let pairingFile =
                 temporaryDirectory
-                    .appendingPathComponent(
-                        "pairing_file.plist"
-                    )
+                    .appendingPathComponent("pairing_file.plist")
 
             try pairingData.write(
                 to: pairingFile,
@@ -169,19 +201,33 @@ final class ShareExtensionHandler: UIViewController {
             )
 
             NSLog(
-                "[DELvEK JIT] Pairing file: %@",
-                pairingFile.path
-            )
-
-            NSLog(
                 "[DELvEK JIT] Developer disk image: %@",
-                paths.developerDiskImagePath
+                paths.imagePath
             )
 
             NSLog(
                 "[DELvEK JIT] Developer disk image trust cache: %@",
-                paths.developerDiskImageTrustCachePath
+                paths.trustcachePath
             )
+
+            NSLog(
+                "[DELvEK JIT] Developer disk image manifest: %@",
+                paths.manifestPath
+            )
+
+            if let cryptexInfoPath = paths.cryptexInfoPath {
+                NSLog(
+                    "[DELvEK JIT] Cryptex info: %@",
+                    cryptexInfoPath
+                )
+            }
+
+            if let rootHashPath = paths.rootHashPath {
+                NSLog(
+                    "[DELvEK JIT] Root hash: %@",
+                    rootHashPath
+                )
+            }
 
             enableJIT(
                 pid: pid,
