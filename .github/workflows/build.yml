@@ -136,12 +136,12 @@ jobs:
           echo "Native dependencies verified successfully."
 
       # ---------------------------------------------------------
-      # Xcode 26.2
+      # Xcode 26.2.0
       # ---------------------------------------------------------
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "26.2"
+          xcode-version: "26.2.0"
 
       - name: Show Xcode information
         shell: bash
