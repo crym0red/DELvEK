@@ -308,17 +308,14 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
         sleep(100);
     }
     if (!LCSharedUtils.certificatePassword && !isSideStore) {
-#if !TARGET_OS_SIMULATOR
-        if(@available(iOS 26.0 ,*))  {
-            return @"JITLess mode is required since iOS 26. Please set it up in settings. \nPlease go to FlekDeck settings and use \"Import Certificate\".";
-        }
-#endif
-        // First of all, let's check if we have JIT
-        for (int i = 0; i < 10 && !checkJITEnabled(); i++) {
+        // A guest can run without a guest certificate when the host has a real JIT
+        // session. Do not force the JIT-less path on iOS 26: the built-in JIT
+        // coordinator may have just enabled JIT for this host/LiveProcess.
+        for (int i = 0; i < 20 && !checkJITEnabled(); i++) {
             usleep(1000*100);
         }
         if (!checkJITEnabled()) {
-            appError = @"JIT was not enabled. If you want to use FlekDeck without JIT, setup JITLess mode in settings.";
+            appError = @"JIT was not enabled. Configure DELvEK Built-in JIT or set up JIT-less signing in Settings.";
             return appError;
         }
     }
