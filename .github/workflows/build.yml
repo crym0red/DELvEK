@@ -21,6 +21,9 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      # ---------------------------------------------------------
+      # Checkout
+      # ---------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -97,8 +100,9 @@ jobs:
           fi
 
           echo
-          echo "Final native dependency status:"
-          echo
+          echo "========================================"
+          echo "Native dependency revisions"
+          echo "========================================"
 
           echo "LiteHook:"
           git -C "$LITEHOOK_DIR" rev-parse HEAD
@@ -107,37 +111,40 @@ jobs:
           echo "OpenSSL:"
           git -C "$OPENSSL_DIR" rev-parse HEAD
 
+      # ---------------------------------------------------------
+      # Verify native dependencies
+      # ---------------------------------------------------------
       - name: Verify native dependencies
         shell: bash
         run: |
           set -euo pipefail
 
           LITEHOOK_DIR="$GITHUB_WORKSPACE/litehook"
-          LITEHOOK_SOURCE="$LITEHOOK_DIR/src/litehook.c"
-          LITEHOOK_HEADER="$LITEHOOK_DIR/src/litehook.h"
-
-          OPENSSL_DIR="$GITHUB_WORKSPACE/OpenSSL"
-          OPENSSL_FRAMEWORK="$OPENSSL_DIR/Frameworks/OpenSSL.xcframework"
+          OPENSSL_FRAMEWORK="$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework"
 
           echo "========================================"
           echo "Checking LiteHook"
           echo "========================================"
 
-          if [ ! -f "$LITEHOOK_SOURCE" ]; then
+          if [ ! -f "$LITEHOOK_DIR/src/litehook.c" ]; then
             echo "::error::Missing LiteHook source:"
-            echo "$LITEHOOK_SOURCE"
-            find "$LITEHOOK_DIR" -maxdepth 5 -print || true
+            echo "$LITEHOOK_DIR/src/litehook.c"
+
+            find "$LITEHOOK_DIR" \
+              -maxdepth 5 \
+              -print \
+              2>/dev/null || true
+
             exit 1
           fi
 
-          if [ ! -f "$LITEHOOK_HEADER" ]; then
+          if [ ! -f "$LITEHOOK_DIR/src/litehook.h" ]; then
             echo "::error::Missing LiteHook header:"
-            echo "$LITEHOOK_HEADER"
+            echo "$LITEHOOK_DIR/src/litehook.h"
             exit 1
           fi
 
-          echo "LiteHook revision:"
-          git -C "$LITEHOOK_DIR" rev-parse HEAD
+          echo "LiteHook OK"
 
           echo
           echo "========================================"
@@ -148,7 +155,7 @@ jobs:
             echo "::error::Missing OpenSSL XCFramework:"
             echo "$OPENSSL_FRAMEWORK"
 
-            find "$OPENSSL_DIR" \
+            find "$GITHUB_WORKSPACE/OpenSSL" \
               -maxdepth 5 \
               -print \
               2>/dev/null \
@@ -157,11 +164,7 @@ jobs:
             exit 1
           fi
 
-          echo "OpenSSL revision:"
-          git -C "$OPENSSL_DIR" rev-parse HEAD
-
-          echo
-          echo "Native dependencies verified."
+          echo "OpenSSL XCFramework OK"
 
       # ---------------------------------------------------------
       # Xcode 26.2
@@ -197,190 +200,171 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/build/StikJIT"
 
       # ---------------------------------------------------------
-      # StikJIT
+      # Build StikJIT
       # ---------------------------------------------------------
-      - name: Build or fetch StikJIT XCFramework
+      - name: Build StikJIT XCFramework
         shell: bash
-        env:
-          STIKJIT_URL: ${{ vars.STIKJIT_URL }}
-          STIKJIT_SHA256: ${{ vars.STIKJIT_SHA256 }}
         run: |
           set -euo pipefail
 
+          SCRIPT="$GITHUB_WORKSPACE/Scripts/build_stikjit.sh"
           STIKJIT_DIR="$GITHUB_WORKSPACE/build/StikJIT"
           STIKJIT_FRAMEWORK="$STIKJIT_DIR/StikJIT.xcframework"
-          SCRIPT="$GITHUB_WORKSPACE/Scripts/build_stikjit.sh"
 
-          rm -rf "$STIKJIT_DIR"
-          mkdir -p "$STIKJIT_DIR"
+          if [ ! -f "$SCRIPT" ]; then
+            echo "::error::Missing StikJIT build script:"
+            echo "$SCRIPT"
+            exit 1
+          fi
+
+          chmod +x "$SCRIPT"
 
           echo "========================================"
-          echo "Attempting local StikJIT build"
+          echo "Building StikJIT"
           echo "========================================"
 
-          if [ -f "$SCRIPT" ]; then
-            chmod +x "$SCRIPT"
+          bash "$SCRIPT"
 
-            if bash "$SCRIPT"; then
-              echo "StikJIT build script completed."
-            else
-              echo "::warning::Local StikJIT build failed."
-            fi
-          else
-            echo "::warning::Scripts/build_stikjit.sh not found."
-          fi
-
-          # -----------------------------------------------------
-          # Find framework produced by the script
-          # -----------------------------------------------------
-          FOUND="$(
-            find "$GITHUB_WORKSPACE" \
-              -type d \
-              -name 'StikJIT.xcframework' \
-              -not -path "$STIKJIT_DIR/*" \
-              -print \
-              -quit \
-              2>/dev/null || true
-          )"
-
-          if [ -n "$FOUND" ]; then
-            echo "Found generated StikJIT:"
-            echo "$FOUND"
-
-            rm -rf "$STIKJIT_FRAMEWORK"
-            ditto "$FOUND" "$STIKJIT_FRAMEWORK"
-          fi
-
-          # -----------------------------------------------------
-          # Verified fallback download
-          #
-          # Configure these repository variables:
-          #
-          # STIKJIT_URL
-          # STIKJIT_SHA256
-          #
-          # The checksum must be the SHA-256 of the downloaded
-          # StikJIT ZIP.
-          # -----------------------------------------------------
-          if [ ! -f "$STIKJIT_FRAMEWORK/Info.plist" ]; then
-
-            echo
-            echo "========================================"
-            echo "Local build did not produce StikJIT"
-            echo "Attempting pinned artifact fallback"
-            echo "========================================"
-
-            if [ -z "${STIKJIT_URL:-}" ]; then
-              echo "::error::STIKJIT_URL is not configured."
-              echo "Add a pinned StikJIT XCFramework ZIP URL as:"
-              echo "Repository Settings > Secrets and variables > Actions > Variables"
-              echo
-              echo "Required variable:"
-              echo "STIKJIT_URL"
-              exit 1
-            fi
-
-            if [ -z "${STIKJIT_SHA256:-}" ]; then
-              echo "::error::STIKJIT_SHA256 is not configured."
-              echo "A SHA-256 checksum is required for the fallback artifact."
-              exit 1
-            fi
-
-            ARCHIVE="$GITHUB_WORKSPACE/build/StikJIT.zip"
-            EXTRACTED="$GITHUB_WORKSPACE/build/StikJITExtracted"
-
-            rm -f "$ARCHIVE"
-            rm -rf "$EXTRACTED"
-
-            echo "Downloading pinned StikJIT artifact..."
-
-            curl \
-              --fail \
-              --location \
-              --retry 3 \
-              --retry-delay 2 \
-              --silent \
-              --show-error \
-              "$STIKJIT_URL" \
-              --output "$ARCHIVE"
-
-            echo
-            echo "Verifying SHA-256..."
-
-            echo "$STIKJIT_SHA256  $ARCHIVE" \
-              | shasum -a 256 -c -
-
-            mkdir -p "$EXTRACTED"
-
-            /usr/bin/unzip \
-              -q \
-              "$ARCHIVE" \
-              -d "$EXTRACTED"
-
-            DOWNLOADED="$(
-              find "$EXTRACTED" \
-                -type d \
-                -name 'StikJIT.xcframework' \
-                -print \
-                -quit
-            )"
-
-            if [ -z "$DOWNLOADED" ]; then
-              echo "::error::Downloaded artifact does not contain StikJIT.xcframework."
-
-              find "$EXTRACTED" \
-                -maxdepth 6 \
-                -print \
-                || true
-
-              exit 1
-            fi
-
-            rm -rf "$STIKJIT_FRAMEWORK"
-            ditto "$DOWNLOADED" "$STIKJIT_FRAMEWORK"
-          fi
-
-          # -----------------------------------------------------
-          # Final verification
-          # -----------------------------------------------------
           echo
           echo "========================================"
-          echo "Verifying StikJIT"
+          echo "Checking generated StikJIT"
           echo "========================================"
 
           if [ ! -d "$STIKJIT_FRAMEWORK" ]; then
-            echo "::error::StikJIT.xcframework was not produced or fetched."
+            echo "::error::StikJIT.xcframework was not produced."
+
+            find "$GITHUB_WORKSPACE/build" \
+              -maxdepth 7 \
+              -print \
+              2>/dev/null || true
+
             exit 1
           fi
 
           if [ ! -f "$STIKJIT_FRAMEWORK/Info.plist" ]; then
             echo "::error::StikJIT.xcframework is missing Info.plist."
-
-            find "$STIKJIT_FRAMEWORK" \
-              -maxdepth 5 \
-              -print \
-              || true
-
             exit 1
           fi
 
-          echo "StikJIT XCFramework:"
+          echo "StikJIT generated successfully:"
           echo "$STIKJIT_FRAMEWORK"
 
+      # ---------------------------------------------------------
+      # CRITICAL:
+      #
+      # build/ is a PBXFileSystemSynchronizedRootGroup in the
+      # checked-in Xcode project.
+      #
+      # build_stikjit.sh creates:
+      #
+      #   build/StikJITSource/
+      #
+      # Xcode therefore discovers those generated source/resource
+      # files automatically AND processes the StikJIT XCFramework.
+      #
+      # That produces duplicate commands such as:
+      #
+      #   legacy.js
+      #   universal.js
+      #
+      # Remove ALL temporary StikJIT source/archive output and
+      # leave only the XCFramework explicitly referenced by the
+      # project.
+      # ---------------------------------------------------------
+      - name: Remove temporary StikJIT build sources
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          STIKJIT_DIR="$GITHUB_WORKSPACE/build/StikJIT"
+          STIKJIT_FRAMEWORK="$STIKJIT_DIR/StikJIT.xcframework"
+
+          echo "========================================"
+          echo "Cleaning temporary StikJIT sources"
+          echo "========================================"
+
+          if [ ! -f "$STIKJIT_FRAMEWORK/Info.plist" ]; then
+            echo "::error::StikJIT framework disappeared before cleanup."
+            exit 1
+          fi
+
+          # build_stikjit.sh creates this source checkout.
+          rm -rf "$GITHUB_WORKSPACE/build/StikJITSource"
+
+          # Remove any temporary archive/build products that the
+          # StikJIT script may have created inside build/.
+          find "$GITHUB_WORKSPACE/build" \
+            -maxdepth 2 \
+            -type d \
+            \( \
+              -name '*.xcarchive' \
+              -o -name 'SourcePackages' \
+            \) \
+            -prune \
+            -exec rm -rf {} + \
+            2>/dev/null || true
+
+          # The ONLY StikJIT item allowed to remain under build/
+          # is the XCFramework referenced by project.pbxproj.
           echo
-          echo "StikJIT contents:"
-          find "$STIKJIT_FRAMEWORK" \
+          echo "Remaining build/StikJIT contents:"
+          find "$GITHUB_WORKSPACE/build/StikJIT" \
             -maxdepth 3 \
             -print
 
           echo
-          echo "StikJIT Info.plist:"
-          /usr/libexec/PlistBuddy \
-            -c 'Print :' \
-            "$STIKJIT_FRAMEWORK/Info.plist"
+          echo "Checking that StikJITSource is gone..."
+
+          if [ -d "$GITHUB_WORKSPACE/build/StikJITSource" ]; then
+            echo "::error::StikJITSource still exists."
+            exit 1
+          fi
+
+          echo "Temporary StikJIT source removed."
+
+      # ---------------------------------------------------------
+      # Final StikJIT verification
+      # ---------------------------------------------------------
+      - name: Verify StikJIT before Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          STIKJIT="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
+
+          echo "========================================"
+          echo "Final StikJIT verification"
+          echo "========================================"
+
+          if [ ! -d "$STIKJIT" ]; then
+            echo "::error::StikJIT.xcframework does not exist."
+            exit 1
+          fi
+
+          if [ ! -f "$STIKJIT/Info.plist" ]; then
+            echo "::error::StikJIT.xcframework Info.plist is missing."
+            exit 1
+          fi
+
+          if [ -d "$GITHUB_WORKSPACE/build/StikJITSource" ]; then
+            echo "::error::Temporary StikJITSource directory remains."
+            exit 1
+          fi
+
+          echo "StikJIT:"
+          echo "$STIKJIT"
 
           echo
-          echo "StikJIT XCFramework verified successfully."
+          echo "XCFramework metadata:"
+          /usr/libexec/PlistBuddy \
+            -c 'Print :' \
+            "$STIKJIT/Info.plist"
+
+          echo
+          echo "Final build/StikJIT contents:"
+          find "$GITHUB_WORKSPACE/build/StikJIT" \
+            -maxdepth 4 \
+            -print
 
       # ---------------------------------------------------------
       # Swift packages
@@ -415,26 +399,6 @@ jobs:
             'PRODUCT_NAME|FULL_PRODUCT_NAME|TARGET_BUILD_DIR|WRAPPER_NAME|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN' \
             "$GITHUB_WORKSPACE/build/build-settings.txt" \
             || true
-
-      # ---------------------------------------------------------
-      # Final StikJIT check immediately before Xcode
-      # ---------------------------------------------------------
-      - name: Verify StikJIT before Xcode build
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          STIKJIT="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
-
-          if [ ! -f "$STIKJIT/Info.plist" ]; then
-            echo "::error::StikJIT is missing immediately before Xcode build."
-            echo "Expected:"
-            echo "$STIKJIT"
-            exit 1
-          fi
-
-          echo "StikJIT is ready for Xcode:"
-          echo "$STIKJIT"
 
       # ---------------------------------------------------------
       # Build unsigned DELvEK
@@ -476,7 +440,7 @@ jobs:
           if-no-files-found: warn
 
       # ---------------------------------------------------------
-      # Locate application
+      # Locate DELvEK.app
       # ---------------------------------------------------------
       - name: Locate DELvEK.app
         shell: bash
@@ -503,8 +467,7 @@ jobs:
             echo "::error::DELvEK.app was not produced."
 
             echo
-            echo "Available .app products:"
-
+            echo "Available application products:"
             find "$PRODUCTS" \
               -type d \
               -name '*.app' \
@@ -521,7 +484,7 @@ jobs:
           echo "$APP"
 
       # ---------------------------------------------------------
-      # Package IPA
+      # Package unsigned IPA
       # ---------------------------------------------------------
       - name: Package unsigned IPA
         shell: bash
@@ -556,7 +519,7 @@ jobs:
           ls -lh "$IPA"
 
       # ---------------------------------------------------------
-      # Verify unsigned artifact
+      # Verify unsigned IPA
       # ---------------------------------------------------------
       - name: Verify unsigned IPA
         shell: bash
