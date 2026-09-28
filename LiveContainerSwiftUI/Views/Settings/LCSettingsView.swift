@@ -434,6 +434,7 @@ struct LCSettingsView: View {
                             Text("\(multitaskIdentityReport)\n\nCopied to clipboard.")
                         }
                     }
+                } // Closes the main Section opened above
 
                 // MARK: - Certificate
                 // DELvEK never requires a FlekStore certificate. Keep the normal
