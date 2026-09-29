@@ -154,7 +154,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             // A single frame rather than no animation at all. The dock is inserted
             // with a transition, and a transition given nothing to run on is left
             // to chance: sometimes it lands on its identity, sometimes on the
-            // scaled-down transparent state it was supposed to animate out of —
+            // scaled-down transparent state it was supposed to animate out of â
             // which is a dock that never appears. One frame is imperceptible and
             // leaves nothing to chance.
             return .linear(duration: 0.01)
@@ -164,7 +164,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
 
     /// Bottom home bar: the multitask dock pill (only while apps are running)
     /// beside a persistent search button. The search button keeps its identity
-    /// across states, so it glides as the pill springs in/out — a morph rather
+    /// across states, so it glides as the pill springs in/out â a morph rather
     /// than a cross-fade.
     // Erased to AnyView: `GlassEffectContainer` and `glassEffect` are iOS 26-only
     // types, and an opaque return type would bake them into this property's static
@@ -214,7 +214,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     @Environment(\.colorScheme) private var colorScheme
     
     @ObservedObject var searchContext: SearchContext
-    /// The device's own bottom safe-area inset — the home indicator, if there is one.
+    /// The device's own bottom safe-area inset â the home indicator, if there is one.
     @State private var homeBottomSafeInset: CGFloat = LCDeviceSafeArea.bottomInset()
     var sortedApps: [LCAppModel] {
         return sharedAppSortManager.sortedApps
@@ -226,18 +226,18 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     
     /// Apps offered to search. Hidden apps are included: the springboard draws no
     /// icon for them, so search is the only place they can still be found. Strict
-    /// Hiding Mode keeps them out until the session is unlocked — the same rule the
-    /// URL-scheme launch path applies — and launching one still passes through the
+    /// Hiding Mode keeps them out until the session is unlocked â the same rule the
+    /// URL-scheme launch path applies â and launching one still passes through the
     /// Face ID gate in `launchHomeApp`.
     /// How far the home bottom bar sits from the bottom of the safe area.
     ///
     /// The grid puts its controls a fixed distance from the bottom edge of the
-    /// *screen*, which on a device with a home indicator is inside the inset —
+    /// *screen*, which on a device with a home indicator is inside the inset â
     /// hence the negative result there, reaching back down past it.
     ///
     /// List mode sits lower still, sinking into the home-indicator inset. A
     /// device with a physical home button has no such inset, so the negative
-    /// value pushed the bar off the bottom of the screen — it keeps a small
+    /// value pushed the bar off the bottom of the screen â it keeps a small
     /// positive margin instead.
     private var homeBottomBarInset: CGFloat {
         guard homeLayout == FlekHomeLayout.list.rawValue else {
@@ -292,7 +292,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 homeContentView
                 .id(homeRefreshToggle)
 
-            // Real progressive blur behind the bottom bar (list layout) — the
+            // Real progressive blur behind the bottom bar (list layout) â the
             // same CAFilter variable blur the installer uses at its bottom edge:
             // clear at the top, ramping to full blur at the bottom, reaching up
             // to just above the search / multitask bar.
@@ -353,8 +353,8 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                     },
                     onOpenStoreApp: { request in
                         // The installer picks the page up from here, so that a
-                        // window already open — which is handed back to the front
-                        // rather than rebuilt — still answers the tap.
+                        // window already open â which is handed back to the front
+                        // rather than rebuilt â still answers the tap.
                         FlekInstallerView.pendingDetailRequest = request
                         openInstaller(atRepo: request.repoURL)
                         NotificationCenter.default.post(name: .flekInstallerOpenAppDetail, object: nil)
@@ -483,7 +483,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             Text("lc.appBanner.deleteDataShortMsg".loc)
         }
         .task {
-            // Wire up the queue's install handler — called serially for each
+            // Wire up the queue's install handler â called serially for each
             // item that has finished downloading and is ready for extraction + signing.
             installQueue.installHandler = { [self] item in
                 let fileURL: URL
@@ -717,7 +717,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         ))
     }
 
-    /// Erased to AnyView — see `homeBottomBar` for why.
+    /// Erased to AnyView â see `homeBottomBar` for why.
     private var doneButtonLabel: AnyView {
         let label = HStack(spacing: 6) {
             Image(systemName: "checkmark")
@@ -816,7 +816,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 if id == "__empty__" {
                     result.append(.placeholder("slot.\(slotIndex)"))
                 } else if id.hasPrefix("__installing.") && id.hasSuffix("__") {
-                    // Persisted as "__installing.<UUID>__" — extract the
+                    // Persisted as "__installing.<UUID>__" â extract the
                     // inner key so the installing item can reclaim its slot.
                     let inner = String(id.dropFirst(2).dropLast(2)) // "installing.<UUID>"
                     // Check if this install is still active; if not, the slot
@@ -831,7 +831,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 } else if let item = available.removeValue(forKey: id) {
                     result.append(item)
                 } else {
-                    // Deleted app – use distinct prefix so per-page
+                    // Deleted app â use distinct prefix so per-page
                     // compaction can remove only these gaps.
                     result.append(.placeholder("deleted.\(slotIndex)"))
                     didReplaceDeleted = true
@@ -850,7 +850,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             }
             // List layout only: installed apps missing from the stored order
             // are newly installed. `available` is a dictionary, so its values
-            // have no stable order — sort them by installation date (oldest
+            // have no stable order â sort them by installation date (oldest
             // first, newest last) so new apps land at the end in install order
             // instead of an arbitrary order that shifts between rebuilds.
             // The grid (springboard) layout is left untouched.
@@ -899,7 +899,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         // The page keeps the number of slots it had, which is the whole point.
         // Page boundaries are recorded beside the order rather than in it, so a
         // page that quietly loses a slot moves every boundary behind it back by
-        // one — the first icon of the next screen steps onto this one, and each
+        // one â the first icon of the next screen steps onto this one, and each
         // screen after that follows. Nothing is removed from `result` here for
         // the same reason: its length is what the boundaries are counted in.
         if didReplaceDeleted {
@@ -969,7 +969,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             }
             let installingItem = FlekHomeItem.installing(item)
             if let installIdx = result.firstIndex(where: isInstallingSlot) {
-                // Reclaiming a previously-persisted slot — no scroll needed
+                // Reclaiming a previously-persisted slot â no scroll needed
                 result[installIdx] = installingItem
             } else if let placeholderIdx = result.firstIndex(where: { $0.isPlaceholder }) {
                 result[placeholderIdx] = installingItem
@@ -1047,7 +1047,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         sharedAppSortManager.customSortOrder = appIds
     }
 
-    /// How many icons fit on a springboard page, worked back from the screen —
+    /// How many icons fit on a springboard page, worked back from the screen â
     /// the same count `LCSpringboardViewController` measures from the page it
     /// has in front of it. Pages the stored sizes say nothing about are this big.
     private var homeItemsPerPage: Int {
@@ -1067,7 +1067,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     /// the persisted page sizes (or uniform chunking as fallback).
     ///
     /// When the index is beyond the stored page sizes the last page is
-    /// filled up to `itemsPerPage` before a new page is assumed —
+    /// filled up to `itemsPerPage` before a new page is assumed â
     /// matching `LCSpringboardViewController.paginateFromFlatItems()`.
     private func pageForIndex(_ index: Int) -> Int {
         let ipp = homeItemsPerPage
@@ -1133,7 +1133,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             // Only ask where a parallel launch is actually possible. `launchHomeApp`
             // falls back to a single launch below iOS 16 and in a secondary
             // LiveContainer install, so the prompt would record a preference that
-            // could never be honoured — and "remember my choice" defaults to on.
+            // could never be honoured â and "remember my choice" defaults to on.
             if mode == nil, isGame(app), sharedModel.multiLCStatus != 2, #available(iOS 16.0, *) {
                 gameWarningTarget = FlekGameWarningTarget(app: app)
             } else {
@@ -1141,14 +1141,14 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 Task { await launchHomeApp(app, parallel: parallel) }
             }
         case .installing(let inst):
-            // A failed install is tappable — open the alert offering to delete it.
+            // A failed install is tappable â open the alert offering to delete it.
             if inst.installState.failed { failedInstallItem = inst }
         case .placeholder:
             break
         }
     }
 
-    /// Opens the installer on one source — as a multitask window where that is
+    /// Opens the installer on one source â as a multitask window where that is
     /// available, and as a full-screen page otherwise.
     private func openInstaller(atRepo repoURL: String) {
         let isMultitaskAvailable: Bool = {
@@ -1185,7 +1185,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 .environmentObject(sceneDelegate)
             }
         case .flekstore:
-            // FlekStore reuses the installer UUID — if already open, bring to front
+            // FlekStore reuses the installer UUID â if already open, bring to front
             if dockManager.apps.contains(where: { $0.appUUID == "internal-installer" }) {
                 let _ = dockManager.bringMultitaskViewToFront(uuid: "internal-installer")
             } else {
@@ -1200,7 +1200,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         }
     }
 
-    // moveHomeItem is no longer needed — Dragula handles reordering
+    // moveHomeItem is no longer needed â Dragula handles reordering
     // directly via the bound items array, and persistHomeOrder() saves
     // the result on drop completion.
 
@@ -1296,7 +1296,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         // but every earlier system left the menu with no sign of the active mode.
         //
         // Rather than give up the compact layout, carry the indicator in the image
-        // on those systems — the image is always drawn. `state` stays set either
+        // on those systems â the image is always drawn. `state` stays set either
         // way, so `.singleSelection` still enforces the radio behaviour and iOS 26
         // keeps using its own styling.
         let usesCompactLayout: Bool
@@ -1315,7 +1315,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         let markInImage = usesCompactLayout && !stylesSelectionItself
         let isSingle = !effectiveIsParallel
 
-        /// UIKit exposes no per-element background tint — `state` is the only
+        /// UIKit exposes no per-element background tint â `state` is the only
         /// selection mechanism, and iOS 26's tinted element is its own styling
         /// rather than something that can be asked for. The image is the one part
         /// of a compact element we control, so colour the active mode's glyph
@@ -1452,7 +1452,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     /// is iOS 16.4+, so with an opaque return type both would land in this
     /// function's static type. The runtime resolves that type before the
     /// availability check runs, so a system without them traps rather than falling
-    /// back. The erasure is kept to this one menu item — the surrounding menu
+    /// back. The erasure is kept to this one menu item â the surrounding menu
     /// content stays a plain ViewBuilder so SwiftUI can still see its items.
     private func launchModeControls(_ app: LCAppModel) -> AnyView {
         if #available(iOS 16.4, *) {
@@ -1558,7 +1558,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     }
 
     /// A locked app's settings hold the lock and hide toggles, so authenticate before
-    /// showing them — the same gate `LCAppBanner` applies. This matters now that
+    /// showing them â the same gate `LCAppBanner` applies. This matters now that
     /// hidden apps are reachable from search: without it the menu would hand out an
     /// unhide switch to anyone who can type the app's name.
     func openAppSettings(_ app: LCAppModel) async {
@@ -1607,7 +1607,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     /// Asks about, and then performs, an uninstall from the home screen.
     ///
     /// A shared app is not this install's copy to take away, so it gets its own
-    /// confirmation, and saying yes converts it to a private app first — which
+    /// confirmation, and saying yes converts it to a private app first â which
     /// is what makes it deletable at all, `uninstall` refusing a shared bundle.
     /// Everything after that point is the same for both kinds of app.
     func requestUninstall(_ app: LCAppModel) async {
@@ -1841,15 +1841,15 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         }
 
         // Locate the .app bundle anywhere in the extracted tree. A valid IPA uses a
-        // top-level `Payload/App.app`, but archives in the wild often differ — a
+        // top-level `Payload/App.app`, but archives in the wild often differ â a
         // wrapper folder with different casing or name, an extra level of nesting,
-        // or no wrapper at all — so search for the .app rather than assume `Payload/`.
+        // or no wrapper at all â so search for the .app rather than assume `Payload/`.
         guard let appFolderPath = Self.findAppBundle(in: extractDir, fm: fm) else {
             throw "lc.appList.bundleNotFondError".loc
         }
         
         // Name and icon chosen on the app's page, applied before LCAppInfo reads
-        // the bundle — it parses Info.plist once at init, so a later edit to the
+        // the bundle â it parses Info.plist once at init, so a later edit to the
         // display name would go unnoticed.
         item.overrides?.applyNameAndIcon(toBundleAt: appFolderPath)
 
@@ -1907,9 +1907,9 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         if fm.fileExists(atPath: outputFolder.path) || sameBundleIdApp.count > 0 {
             // Sanitised like the first-install name above: this becomes the app's
             // relativeBundlePath, which is interpolated straight into
-            // flekdeck://livecontainer-launch?bundle-name=… URLs, so a
+            // flekdeck://livecontainer-launch?bundle-name=â¦ URLs, so a
             // non-ASCII bundle id here would produce a launch URL that no longer
-            // parses — breaking Add to Home Screen and the relaunch handoff.
+            // parses â breaking Add to Home Screen and the relaunch handoff.
             appRelativePath = "\(newAppInfo.bundleIdentifier()!.sanitizeNonACSII())_\(Int(CFAbsoluteTimeGetCurrent())).app"
             
             self.installOptions = [AppReplaceOption(isReplace: false, nameOfFolderToInstall: appRelativePath)]
@@ -1931,7 +1931,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             appRelativePath = installOptionChosen.nameOfFolderToInstall
             appToReplace = installOptionChosen.appToReplace
             // Nothing to move aside when the entry being replaced has already lost
-            // its folder — reinstalling over such a leftover is how the user gets
+            // its folder â reinstalling over such a leftover is how the user gets
             // rid of it, so it must not fail the way removing a missing folder did.
             if installOptionChosen.isReplace, fm.fileExists(atPath: outputFolder.path) {
                 // Move the app being replaced aside rather than deleting it, and
@@ -1939,7 +1939,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 // leaves nothing behind if the move then fails or the process is
                 // killed in between: the list keeps an entry pointing at a folder
                 // that no longer exists, which can be neither launched, converted
-                // between private and shared, nor — for a shared app — removed.
+                // between private and shared, nor â for a shared app â removed.
                 // LCPath.replacingSuffix names the copy so that an interrupted
                 // install is put back on the next launch.
                 replacedBundleBackup = outputFolder
@@ -2060,7 +2060,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         // app's Fixes section is on, so turn it on here instead of leaving the
         // user to discover the toggle. Matching the bundle id loosely covers the
         // whole family (net.whatsapp.WhatsApp, .WhatsAppSMB, re-signed clones).
-        // Deliberately applied on reinstall too — an app updated from an older
+        // Deliberately applied on reinstall too â an app updated from an older
         // install should end up with the fix on as well.
         if finalNewApp.bundleIdentifier()?.localizedCaseInsensitiveContains("whatsapp") ?? false {
             finalNewApp.fixLocalNotification = true
@@ -2081,7 +2081,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             // Only while the toggle is still at its default: an update copies the
             // previous install's `orientationLock`, and a choice the user made once
             // has to survive the app being updated. Written into the same dictionary
-            // as the flags above — `orientationLock` reads this key — so the save
+            // as the flags above â `orientationLock` reads this key â so the save
             // below persists all of it in one write.
             if landscapeOnly, finalNewApp.orientationLock == .Disabled {
                 finalNewApp.info()?["LCOrientationLock"] = LCOrientationLock.Landscape.rawValue
@@ -2112,7 +2112,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 }
             }
             
-            // Don't rebuild here — the install item is still in
+            // Don't rebuild here â the install item is still in
             // .installing phase so its slot won't be freed for the new
             // app.  The rebuild is triggered after markCompleted() sets
             // .completed, via .onChange(of: completedURLs.count).
@@ -2224,8 +2224,8 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     /// Copies an IPA that is only reachable through a security scope into our
     /// own temporary directory, and returns the copy.
     ///
-    /// Returns nil when the file is already readable — the ordinary case for
-    /// anything chosen with the document picker, which needs no copy — and
+    /// Returns nil when the file is already readable â the ordinary case for
+    /// anything chosen with the document picker, which needs no copy â and
     /// when no copy could be made, which the caller tells the difference
     /// between by looking at the file again.
     private func stageSecurityScopedIpaIfNeeded(_ url: URL) -> URL? {
@@ -2268,7 +2268,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         guard fm.isReadableFile(atPath: resolved.path) else { return nil }
 
         let dest = fm.temporaryDirectory.appendingPathComponent(resolved.lastPathComponent)
-        // The same file can be handed over twice — the scene delegate parks
+        // The same file can be handed over twice â the scene delegate parks
         // every URL UIKit gives it, and SwiftUI may deliver that same URL on
         // its own. The queue drops the second install, but only after this has
         // run, and re-copying over a file the first install is reading would
@@ -2298,7 +2298,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             // app declares: two installs of the same guest claim the same schemes,
             // and this list is rebuilt from exactly those apps at launch. Without
             // this, LiveContainer keeps claiming the removed app's schemes for the
-            // rest of the session — and a secondary instance, which never rebuilds
+            // rest of the session â and a secondary instance, which never rebuilds
             // the list, keeps claiming them for good.
             if let schemes = app.appInfo.urlSchemes() as? [String], !schemes.isEmpty {
                 let stillClaimed = Set(sharedModel.apps.flatMap { $0.appInfo.urlSchemes() as? [String] ?? [] })
@@ -2310,8 +2310,8 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             }
 
             // The launcher's own records are keyed by the app's folder name and
-            // live in the app group, so nothing about uninstalling the app — or
-            // even reinstalling LiveContainer — clears them on its own. Left
+            // live in the app group, so nothing about uninstalling the app â or
+            // even reinstalling LiveContainer â clears them on its own. Left
             // behind, the next install of the same app silently adopts the old
             // app's launch mode and never shows as new.
             FlekLaunchModeStore.shared.forget(app)
@@ -2325,7 +2325,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             //
             // Splicing the id out first is what stopped that happening. It shifts
             // every id after it back one place, so the rebuild finds nothing
-            // missing, skips the whole per-page pass — and the first icon of the
+            // missing, skips the whole per-page pass â and the first icon of the
             // next screen steps back onto this one to fill the hole.
             if let uniqueId = sharedAppSortManager.getUniqueIdentifier(for: app) {
                 sharedAppSortManager.customSortOrder.removeAll { $0 == uniqueId }
@@ -2455,59 +2455,96 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     }
     
     func jitLaunch(withPID pid: Int, withScript script: String? = nil, appName: String) async {
-        await MainActor.run {
-            let encodedData = script?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-                
-            
-            if let jitEnabler = JITEnablerType(rawValue: LCUtils.appGroupUserDefault.integer(forKey: "LCJITEnablerType")) {
-                if jitEnabler == .BuiltInStikJIT {
-                    let result = await LocalJITService.shared.enableJIT(targetPID: Int32(pid))
-                    if !result.success {
-                        self.errorInfo = result.message
-                        self.errorShow = true
+        let encodedData = script?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+
+        guard let jitEnabler = JITEnablerType(
+            rawValue: LCUtils.appGroupUserDefault.integer(forKey: "LCJITEnablerType")
+        ) else {
+            return
+        }
+
+        if jitEnabler == .BuiltInStikJIT {
+            let result = await LocalJITService.shared.enableJIT(targetPID: Int32(pid))
+
+            await MainActor.run {
+                if !result.success {
+                    self.errorInfo = result.message
+                    self.errorShow = true
+                }
+            }
+
+            return
+        }
+
+        if jitEnabler == .StosDebug || jitEnabler == .StosDebugLC {
+            let encoded = encodedData.map { "&script=\($0)" } ?? ""
+
+            if jitEnabler == .StosDebugLC {
+                let app = await MainActor.run {
+                    sharedModel.apps.first(where: { app in
+                        app.appInfo.urlSchemes().contains("stosdebug") &&
+                        (sharedModel.multiLCStatus != 2 || app.appInfo.isShared)
+                    })
+                }
+
+                guard app != nil else {
+                    await MainActor.run {
+                        errorInfo = "StosDebug is not found. Please install it first and switch it to shared app."
+                        errorShow = true
                     }
                     return
                 }
-                if jitEnabler == .StosDebug || jitEnabler == .StosDebugLC {
-                    let encoded = encodedData.map { "&script=\($0)" } ?? ""
-                    if jitEnabler == .StosDebugLC {
-                        if let app = sharedModel.apps.first(where: { app in
-                            return app.appInfo.urlSchemes().contains("stosdebug") &&
-                            (sharedModel.multiLCStatus != 2 || app.appInfo.isShared)
-                        }) {
-                            if var url = URL(string: "stosdebug://enableJIT?bundleId=\(Bundle.main.bundleIdentifier!)&appName=\(appName)&pid=\(pid)&relaunchApp=false& forcePID=true\(encoded)") {
-                                Task { await openWebView(urlString: url.absoluteString) }
-                            }
-                        } else {
-                            errorInfo = "StosDebug is not found. Please install it first and switch it to shared app."
-                            errorShow = true
-                            return
-                        }
-                    } else {
-                        if var url = URL(string: "stosdebug://enableJIT?bundleId=\(Bundle.main.bundleIdentifier!)&appName=\(appName)&pid=\(pid)&forcePID=true\(encoded)") {
-                            UIApplication.shared.open(url)
-                        }
-                    }
+
+                guard let url = URL(
+                    string: "stosdebug://enableJIT?bundleId=\(Bundle.main.bundleIdentifier!)&appName=\(appName)&pid=\(pid)&relaunchApp=false&forcePID=true\(encoded)"
+                ) else {
                     return
                 }
-                
-                let encoded = encodedData.map { "&script-data=\($0)" } ?? ""
-                if let url = URL(string: "stikjit://enable-jit?bundle-id=\(Bundle.main.bundleIdentifier!)&pid=\(pid)\(encoded)") {
-                    if jitEnabler == .StikJITLC {
-                        if let app = sharedModel.apps.first(where: { app in
-                            return app.appInfo.urlSchemes().contains("stikjit") &&
-                            (sharedModel.multiLCStatus != 2 || app.appInfo.isShared)
-                        }) {
-                            Task { await openWebView(urlString: url.absoluteString) }
-                        } else {
-                            errorInfo = "StikDebug is not found. Please install it first and switch it to shared app."
-                            errorShow = true
-                            return
-                        }
-                    } else {
-                        UIApplication.shared.open(url)
-                    }
+
+                await openWebView(urlString: url.absoluteString)
+            } else {
+                guard let url = URL(
+                    string: "stosdebug://enableJIT?bundleId=\(Bundle.main.bundleIdentifier!)&appName=\(appName)&pid=\(pid)&forcePID=true\(encoded)"
+                ) else {
+                    return
                 }
+
+                await MainActor.run {
+                    UIApplication.shared.open(url)
+                }
+            }
+
+            return
+        }
+
+        let encoded = encodedData.map { "&script-data=\($0)" } ?? ""
+
+        guard let url = URL(
+            string: "stikjit://enable-jit?bundle-id=\(Bundle.main.bundleIdentifier!)&pid=\(pid)\(encoded)"
+        ) else {
+            return
+        }
+
+        if jitEnabler == .StikJITLC {
+            let app = await MainActor.run {
+                sharedModel.apps.first(where: { app in
+                    app.appInfo.urlSchemes().contains("stikjit") &&
+                    (sharedModel.multiLCStatus != 2 || app.appInfo.isShared)
+                })
+            }
+
+            guard app != nil else {
+                await MainActor.run {
+                    errorInfo = "StikDebug is not found. Please install it first and switch it to shared app."
+                    errorShow = true
+                }
+                return
+            }
+
+            await openWebView(urlString: url.absoluteString)
+        } else {
+            await MainActor.run {
+                UIApplication.shared.open(url)
             }
         }
     }
@@ -2646,4 +2683,3 @@ private struct OrientationLockModifier: ViewModifier {
             }
     }
 }
-
