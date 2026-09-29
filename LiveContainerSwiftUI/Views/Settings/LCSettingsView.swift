@@ -72,9 +72,9 @@ struct LCSettingsView: View {
     @AppStorage("LCLaunchInMultitaskMode") var launchInMultitaskMode = true
     @AppStorage("LCLaunchMultitaskMaximized") var launchMultitaskMaximized = false
     // Multitask switcher bar: rounded (tall, concave corners) when on, flat short bar when off.
-    // Bar rounding amount, 0 (flat) … 100 (fully rounded concave corners).
+    // Bar rounding amount, 0 (flat) â¦ 100 (fully rounded concave corners).
     @AppStorage("LCMultitaskBarLedgeAmount", store: LCUtils.appGroupUserDefault) var barLedgeAmount: Double = 60
-    // Multitask control haptics: 0 (off) … 3 (strongest). Read back through
+    // Multitask control haptics: 0 (off) â¦ 3 (strongest). Read back through
     // MultitaskDockManager, which also carries over the on/off switch this
     // slider replaced.
     @AppStorage("LCMultitaskHapticsLevel", store: LCUtils.appGroupUserDefault) var multitaskHapticsLevel = 1
@@ -147,7 +147,7 @@ struct LCSettingsView: View {
 
     // The guest names itself. The image name above can only ever say which
     // library made the call, and resolves to nothing when the caller sits in a
-    // hook trampoline — which is why this row used to say only "guest code".
+    // hook trampoline â which is why this row used to say only "guest code".
     @AppStorage("LCHostIdentityReaderApp", store: LCUtils.appGroupUserDefault)
     private var hostIdentityReaderApp: String = ""
     
@@ -180,7 +180,7 @@ struct LCSettingsView: View {
         hostIdentityUdid.isEmpty ? "" : hostIdentityUdid
     }
 
-    // These live in app group defaults, which outlive the app itself — reinstalling
+    // These live in app group defaults, which outlive the app itself â reinstalling
     // does not clear them. So a status with no timestamp beside it may well be from
     // a previous install, which is exactly how a diagnostic starts lying.
     private var multitaskIdentityDate: Date? {
@@ -188,7 +188,7 @@ struct LCSettingsView: View {
     }
 
     // One line for the row. Everything else moved behind a tap once this grew past
-    // what a Settings row can show — a truncated diagnostic is worse than a short
+    // what a Settings row can show â a truncated diagnostic is worse than a short
     // one, because the ellipsis hides exactly the part being looked for.
     private var multitaskIdentitySummary: String {
         guard !hostIdentityStatus.isEmpty else {
@@ -198,11 +198,11 @@ struct LCSettingsView: View {
         }
         let carried = hostIdentityUdid.isEmpty ? "Not carried" : "Carried"
         switch hostIdentityReads {
-        case ..<0: return "\(carried) · read count pending · tap for detail"
-        case 0: return "\(carried) · never read · tap for detail"
+        case ..<0: return "\(carried) Â· read count pending Â· tap for detail"
+        case 0: return "\(carried) Â· never read Â· tap for detail"
         default:
             let reader = hostIdentityReader.isEmpty ? "guest code" : hostIdentityReader
-            return "\(carried) · read \(hostIdentityReads)× by \(reader) · tap for detail"
+            return "\(carried) Â· read \(hostIdentityReads)Ã by \(reader) Â· tap for detail"
         }
     }
 
@@ -210,8 +210,8 @@ struct LCSettingsView: View {
     // readable here: comparing two devices means sending this to someone else.
     private var multitaskIdentityReport: String {
         var lines: [String] = []
-        lines.append("App: \(publishedEncryptedUdid.isEmpty ? "—" : publishedEncryptedUdid)")
-        lines.append("Guest: \(hostIdentityUdid.isEmpty ? "—" : hostIdentityUdid)")
+        lines.append("App: \(publishedEncryptedUdid.isEmpty ? "â" : publishedEncryptedUdid)")
+        lines.append("Guest: \(hostIdentityUdid.isEmpty ? "â" : hostIdentityUdid)")
         if hostIdentityStatus.isEmpty {
             lines.append("No app has been launched in parallel yet.")
         } else {
@@ -224,7 +224,7 @@ struct LCSettingsView: View {
             case 0: lines.append("Never read by the guest")
             default:
                 let app = hostIdentityReaderApp.isEmpty ? "guest code" : hostIdentityReaderApp
-                lines.append("Read \(hostIdentityReads)× by \(app)")
+                lines.append("Read \(hostIdentityReads)Ã by \(app)")
                 if !hostIdentityReader.isEmpty {
                     lines.append("via \(hostIdentityReader)")
                 }
@@ -271,7 +271,7 @@ struct LCSettingsView: View {
     /// Enough of it survives to recognise the device at a glance and to match
     /// against a support request, and not enough to register or sign with. The
     /// copy button beside it still yields the real value, which is the one place
-    /// it is needed — reading it off a screen is not, and a screenshot or a
+    /// it is needed â reading it off a screen is not, and a screenshot or a
     /// shoulder is how it usually escapes.
     private var maskedUdid: String {
         Self.masking(udid)
@@ -291,7 +291,7 @@ struct LCSettingsView: View {
             + String(value.suffix(ends))
     }
 
-    /// Name of the step the haptics slider currently sits on, shown beside it —
+    /// Name of the step the haptics slider currently sits on, shown beside it â
     /// a strength is easier to recognise by name than by a bare number, and the
     /// left end being "Off" is the part worth being explicit about.
     private var multitaskHapticsLevelName: String {
@@ -371,15 +371,15 @@ struct LCSettingsView: View {
                     }
                     .padding(.vertical, 6)
 
-                    // Developer-only. This is a diagnostic — it exists to compare what the
-                    // guest's identity check actually saw against what the app holds — and it
+                    // Developer-only. This is a diagnostic â it exists to compare what the
+                    // guest's identity check actually saw against what the app holds â and it
                     // means nothing to anyone not chasing that particular mismatch.
                     if sharedModel.developerMode {
                         // MARK: - Multitask identity
                         // What reached the last app launched in parallel. A guest reads
                         // the identifier from the host process' bundle, which is the
                         // extension rather than the app, so this is the value the check
-                        // actually saw — not the one the app holds.
+                        // actually saw â not the one the app holds.
                         HStack(spacing: 12) {
                             Image(systemName: "square.on.square")
                                 .font(.system(size: 20))
@@ -392,13 +392,13 @@ struct LCSettingsView: View {
                                 Text("Multitask UDID")
                                     .font(.body)
 
-                                Text("App: \(publishedEncryptedUdid.isEmpty ? "—" : publishedEncryptedUdid)")
+                                Text("App: \(publishedEncryptedUdid.isEmpty ? "â" : publishedEncryptedUdid)")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.3)
 
-                                Text("Guest: \(multitaskIdentityValue.isEmpty ? "—" : multitaskIdentityValue)")
+                                Text("Guest: \(multitaskIdentityValue.isEmpty ? "â" : multitaskIdentityValue)")
                                     .font(.subheadline)
                                     .foregroundColor(multitaskIdentityIsProblem ? .orange : .secondary)
                                     .lineLimit(1)
@@ -537,7 +537,7 @@ struct LCSettingsView: View {
                 // kept 20pt clear of each window edge, and a section footer a further
                 // 20pt inside that, so a long version string wraps where the warning
                 // does. The padding sits within the frame so the background still
-                // covers the whole row — inset the row itself and the cell's own card
+                // covers the whole row â inset the row itself and the cell's own card
                 // colour shows along both edges.
                 .padding(.horizontal, 20)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -736,7 +736,7 @@ struct LCSettingsView: View {
     @ViewBuilder
     private func linkRow(_ imageName: String, _ title: String, action: @escaping () -> Void) -> some View {
         // These open URLs rather than pushing a view, so there's no NavigationLink to
-        // supply a disclosure indicator — it's drawn by hand to match the category
+        // supply a disclosure indicator â it's drawn by hand to match the category
         // rows above. `.plain` keeps the title in the label colour like those rows
         // (a bare Button would tint it), and the content shape makes the whole row
         // tappable rather than just the text.
@@ -759,7 +759,7 @@ struct LCSettingsView: View {
     }
 
     /// `iconSize` is per-symbol on purpose. Point size sets the em, not the drawn
-    /// shape, and how much of that em a symbol inks varies by design — an enclosed
+    /// shape, and how much of that em a symbol inks varies by design â an enclosed
     /// glyph like `j.circle` or a thin one like `app.grid` reads far smaller than a
     /// `.fill` symbol at the same size. The default suits most of the set; the
     /// densest symbols pass a smaller value rather than everything sharing one size
@@ -1005,7 +1005,11 @@ struct LCSettingsView: View {
         }
         .fileImporter(isPresented: $showPairingImporter, allowedContentTypes: [.propertyList], allowsMultipleSelection: false) { result in
             switch result {
-            case .success(let url):
+            case .success(let urls):
+                guard let url = urls.first else {
+                    return
+                }
+
                 do {
                     try LocalJITService.shared.storePairingFile(from: url)
                     pairingStatus = true
@@ -1013,6 +1017,7 @@ struct LCSettingsView: View {
                     errorInfo = error.localizedDescription
                     errorShow = true
                 }
+
             case .failure(let error):
                 errorInfo = error.localizedDescription
                 errorShow = true
