@@ -1,25 +1,20 @@
 name: DELvEK Unsigned iOS Build
-
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-
 permissions:
   contents: read
-
 env:
   PROJECT: LiveContainer.xcodeproj
   SCHEME: LiveContainer
   CONFIGURATION: Release
   DERIVED_DATA: ${{ github.workspace }}/build/DerivedData
-
 jobs:
   build-unsigned:
     name: Build unsigned DELvEK
     runs-on: macos-latest
-
     steps:
       # =========================================================
       # CHECKOUT
@@ -30,7 +25,6 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           lfs: true
-
       # =========================================================
       # NATIVE DEPENDENCIES
       # =========================================================
@@ -38,66 +32,48 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           git submodule sync --recursive
           git submodule update --init --recursive --force
-
           echo "========================================"
           echo "Submodule status"
           echo "========================================"
-
           git submodule status --recursive || true
-
           # -----------------------------------------------------
           # LiteHook
           # -----------------------------------------------------
           LITEHOOK_DIR="$GITHUB_WORKSPACE/litehook"
           LITEHOOK_SOURCE="$LITEHOOK_DIR/src/litehook.c"
           LITEHOOK_HEADER="$LITEHOOK_DIR/src/litehook.h"
-
           LITEHOOK_REPO="https://github.com/LiveContainer/litehook.git"
           LITEHOOK_COMMIT="a7e9f599d7f0b3d77008ad62bf10cb10dab6eca9"
-
           if [ ! -f "$LITEHOOK_SOURCE" ] || \
              [ ! -f "$LITEHOOK_HEADER" ]; then
-
             echo "Restoring pinned LiteHook."
-
             rm -rf "$LITEHOOK_DIR"
-
             git clone \
               --filter=blob:none \
               --no-checkout \
               "$LITEHOOK_REPO" \
               "$LITEHOOK_DIR"
-
             git -C "$LITEHOOK_DIR" checkout --detach "$LITEHOOK_COMMIT"
           fi
-
           # -----------------------------------------------------
           # OpenSSL
           # -----------------------------------------------------
           OPENSSL_DIR="$GITHUB_WORKSPACE/OpenSSL"
           OPENSSL_FRAMEWORK="$OPENSSL_DIR/Frameworks/OpenSSL.xcframework"
-
           OPENSSL_REPO="https://github.com/krzyzanowskim/OpenSSL.git"
           OPENSSL_COMMIT="623c84da314e85363236507ca38a4bde65df21c3"
-
           if [ ! -f "$OPENSSL_FRAMEWORK/Info.plist" ]; then
-
             echo "Restoring pinned OpenSSL."
-
             rm -rf "$OPENSSL_DIR"
-
             git clone \
               --filter=blob:none \
               --no-checkout \
               "$OPENSSL_REPO" \
               "$OPENSSL_DIR"
-
             git -C "$OPENSSL_DIR" checkout --detach "$OPENSSL_COMMIT"
           fi
-
       # =========================================================
       # VERIFY NATIVE DEPENDENCIES
       # =========================================================
@@ -105,11 +81,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           echo "========================================"
           echo "Checking LiteHook"
           echo "========================================"
-
           if [ ! -f "$GITHUB_WORKSPACE/litehook/src/litehook.c" ]; then
             echo "::error::Missing LiteHook source:"
             echo "$GITHUB_WORKSPACE/litehook/src/litehook.c"
@@ -119,51 +93,38 @@ jobs:
               2>/dev/null || true
             exit 1
           fi
-
           if [ ! -f "$GITHUB_WORKSPACE/litehook/src/litehook.h" ]; then
             echo "::error::Missing LiteHook header:"
             echo "$GITHUB_WORKSPACE/litehook/src/litehook.h"
             exit 1
           fi
-
           echo "LiteHook source:"
           echo "$GITHUB_WORKSPACE/litehook/src/litehook.c"
-
           echo "LiteHook header:"
           echo "$GITHUB_WORKSPACE/litehook/src/litehook.h"
-
           echo "LiteHook revision:"
           git -C "$GITHUB_WORKSPACE/litehook" rev-parse HEAD
-
           echo
           echo "========================================"
           echo "Checking OpenSSL"
           echo "========================================"
-
           OPENSSL_FRAMEWORK="$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework"
-
           if [ ! -f "$OPENSSL_FRAMEWORK/Info.plist" ]; then
             echo "::error::Missing OpenSSL XCFramework:"
             echo "$OPENSSL_FRAMEWORK"
-
             find "$GITHUB_WORKSPACE/OpenSSL" \
               -maxdepth 5 \
               -print \
               2>/dev/null \
               | head -300 || true
-
             exit 1
           fi
-
           echo "OpenSSL XCFramework:"
           echo "$OPENSSL_FRAMEWORK"
-
           echo "OpenSSL revision:"
           git -C "$GITHUB_WORKSPACE/OpenSSL" rev-parse HEAD
-
           echo
           echo "Native dependencies OK."
-
       # =========================================================
       # XCODE 26.2
       # =========================================================
@@ -171,46 +132,28 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: "26.2.0"
-
       # =========================================================
       # VERIFY XCODE
-      #
-      # IMPORTANT:
-      # Do NOT pipe xcodebuild -version directly into grep -q.
-      #
-      # With pipefail enabled, grep -q can close the pipe early,
-      # causing xcodebuild to receive SIGPIPE and report:
-      #
-      # NSFileHandleOperationException: Broken pipe
-      # Abort trap: 6
       # =========================================================
       - name: Verify Xcode toolchain
         shell: bash
         run: |
           set -euo pipefail
-
           echo "========================================"
           echo "Xcode"
           echo "========================================"
-
           XCODE_VERSION="$(xcodebuild -version)"
-
           printf '%s\n' "$XCODE_VERSION"
-
           echo
           echo "Developer directory:"
           xcode-select -p
-
           echo
           echo "Swift:"
           swift --version
-
           echo
           echo "SDKs:"
           xcodebuild -showsdks
-
           EXPECTED_XCODE="Xcode 26.2"
-
           if [[ "$XCODE_VERSION" != *"$EXPECTED_XCODE"* ]]; then
             echo "::error::Expected Xcode 26.2."
             echo
@@ -218,10 +161,8 @@ jobs:
             printf '%s\n' "$XCODE_VERSION"
             exit 1
           fi
-
           echo
           echo "Xcode 26.2 verified successfully."
-
       # =========================================================
       # CLEAN BUILD
       # =========================================================
@@ -229,41 +170,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           rm -rf "$GITHUB_WORKSPACE/build"
           rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
           rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
-
           mkdir -p "$GITHUB_WORKSPACE/build"
           mkdir -p "$GITHUB_WORKSPACE/build/StikJIT"
-
       # =========================================================
-      # BUILD STIKJIT WITH XCODE 26.2
+      # BUILD STIKJIT
       # =========================================================
       - name: Build StikJIT with Xcode 26.2
         shell: bash
         run: |
           set -euo pipefail
-
           SCRIPT="$GITHUB_WORKSPACE/Scripts/build_stikjit.sh"
-
           if [ ! -f "$SCRIPT" ]; then
             echo "::error::Missing StikJIT build script:"
             echo "$SCRIPT"
             exit 1
           fi
-
           chmod +x "$SCRIPT"
-
           echo "========================================"
           echo "Building StikJIT"
           echo "========================================"
-
           bash "$SCRIPT"
-
           echo
           echo "Searching for generated StikJIT..."
-
           FOUND="$(
             find "$GITHUB_WORKSPACE" \
               -type d \
@@ -272,33 +203,26 @@ jobs:
               -quit \
               2>/dev/null || true
           )"
-
           if [ -z "$FOUND" ]; then
             echo "::error::build_stikjit.sh did not produce StikJIT.xcframework."
-
             find "$GITHUB_WORKSPACE/build" \
               -maxdepth 8 \
               -print \
               2>/dev/null || true
-
             exit 1
           fi
-
           echo "Generated framework:"
           echo "$FOUND"
-
           TARGET="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
-
           if [ "$FOUND" != "$TARGET" ]; then
             rm -rf "$TARGET"
             ditto "$FOUND" "$TARGET"
           fi
-
           if [ ! -f "$TARGET/Info.plist" ]; then
             echo "::error::Generated StikJIT XCFramework is invalid."
             exit 1
           fi
-
+          echo "StikJIT XCFramework verified."
       # =========================================================
       # REMOVE TEMPORARY STIKJIT SOURCE
       # =========================================================
@@ -306,23 +230,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           STIKJIT="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
-
           if [ ! -f "$STIKJIT/Info.plist" ]; then
             echo "::error::StikJIT XCFramework is missing."
             exit 1
           fi
-
           rm -rf "$GITHUB_WORKSPACE/build/StikJITSource"
-
           if [ -d "$GITHUB_WORKSPACE/build/StikJITSource" ]; then
             echo "::error::StikJITSource still exists."
             exit 1
           fi
-
           echo "Temporary StikJIT source removed."
-
       # =========================================================
       # INSPECT / NORMALIZE STIKJIT INTERFACES
       # =========================================================
@@ -330,13 +248,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           XC="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
-
           echo "========================================"
           echo "Inspecting StikJIT Swift interfaces"
           echo "========================================"
-
           INTERFACES="$(
             find "$XC" \
               -type f \
@@ -344,39 +259,29 @@ jobs:
               -print \
               2>/dev/null || true
           )"
-
           if [ -z "$INTERFACES" ]; then
             echo "No textual Swift interfaces found."
             exit 0
           fi
-
           printf '%s\n' "$INTERFACES"
-
           while IFS= read -r FILE; do
             [ -n "$FILE" ] || continue
-
             echo
             echo "Checking:"
             echo "$FILE"
-
             if grep -nE \
               'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
               "$FILE" \
               >/dev/null 2>&1; then
-
               echo "Normalizing problematic StikJIT references."
-
               cp "$FILE" "$FILE.before-normalization"
-
               sed -i '' \
                 -e 's/StikJIT\.DDIPaths/DDIPaths/g' \
                 -e 's/StikJIT\.DeveloperDiskImageService/DeveloperDiskImageService/g' \
                 -e 's/StikJIT\.StikJIT/StikJIT/g' \
                 "$FILE"
             fi
-
           done <<< "$INTERFACES"
-
       # =========================================================
       # VALIDATE STIKJIT
       # =========================================================
@@ -384,16 +289,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           XC="$GITHUB_WORKSPACE/build/StikJIT/StikJIT.xcframework"
-
           echo "========================================"
           echo "Validating StikJIT"
           echo "========================================"
-
           test -d "$XC"
           test -f "$XC/Info.plist"
-
           echo
           echo "Module directories:"
           find "$XC" \
@@ -401,31 +302,24 @@ jobs:
             -path '*/Modules/StikJIT.swiftmodule' \
             -print \
             || true
-
           echo
           echo "Checking problematic interface references..."
-
           if grep -R \
             -nE \
             'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
             "$XC" \
             --include='*.swiftinterface' \
             >/dev/null 2>&1; then
-
             echo "::error::Invalid StikJIT-qualified references remain."
-
             grep -R \
               -nE \
               'StikJIT\.(DDIPaths|DeveloperDiskImageService|StikJIT)' \
               "$XC" \
               --include='*.swiftinterface' \
               || true
-
             exit 1
           fi
-
           echo "StikJIT validation passed."
-
       # =========================================================
       # SWIFT PACKAGES
       # =========================================================
@@ -433,12 +327,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           xcodebuild \
             -resolvePackageDependencies \
             -project "$GITHUB_WORKSPACE/$PROJECT" \
             -scheme "$SCHEME"
-
       # =========================================================
       # BUILD SETTINGS
       # =========================================================
@@ -446,7 +338,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           xcodebuild \
             -project "$GITHUB_WORKSPACE/$PROJECT" \
             -scheme "$SCHEME" \
@@ -454,12 +345,10 @@ jobs:
             -sdk iphoneos \
             -showBuildSettings \
             > "$GITHUB_WORKSPACE/build/build-settings.txt"
-
           grep -E \
             'PRODUCT_NAME|FULL_PRODUCT_NAME|TARGET_BUILD_DIR|WRAPPER_NAME|PRODUCT_BUNDLE_IDENTIFIER|SWIFT_VERSION|SWIFT_ENABLE_EXPLICIT_MODULES|BUILD_LIBRARY_FOR_DISTRIBUTION' \
             "$GITHUB_WORKSPACE/build/build-settings.txt" \
             || true
-
       # =========================================================
       # BUILD UNSIGNED DELVEK
       # =========================================================
@@ -467,13 +356,10 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-
           DERIVED_DATA="$GITHUB_WORKSPACE/build/DerivedData"
           LOG="$GITHUB_WORKSPACE/build/xcodebuild.log"
-
           rm -rf "$DERIVED_DATA"
           mkdir -p "$DERIVED_DATA"
-
           xcodebuild build \
             -project "$GITHUB_WORKSPACE/$PROJECT" \
             -scheme "$SCHEME" \
@@ -486,7 +372,6 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$LOG"
-
       # =========================================================
       # DIAGNOSTICS
       # =========================================================
@@ -500,7 +385,6 @@ jobs:
             build/build-settings.txt
             build/StikJIT
           if-no-files-found: warn
-
       # =========================================================
       # LOCATE APP
       # =========================================================
@@ -508,15 +392,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           PRODUCTS="$GITHUB_WORKSPACE/build/DerivedData/Build/Products"
-
           if [ ! -d "$PRODUCTS" ]; then
             echo "::error::Build Products directory does not exist:"
             echo "$PRODUCTS"
             exit 1
           fi
-
           APP="$(
             find "$PRODUCTS" \
               -type d \
@@ -524,60 +405,120 @@ jobs:
               -print \
               -quit
           )"
-
           if [ -z "$APP" ]; then
             echo "::error::DELvEK.app was not produced."
-
             find "$PRODUCTS" \
               -type d \
               -name '*.app' \
               -print \
               || true
-
             exit 1
           fi
-
           printf '%s\n' "$APP" \
             > "$GITHUB_WORKSPACE/build/app-path.txt"
-
           echo "DELvEK.app:"
           echo "$APP"
-
       # =========================================================
       # PACKAGE IPA
+      #
+      # IMPORTANT:
+      # The Xcode build is unsigned, but embedded prebuilt
+      # frameworks can still contain their own signatures.
+      #
+      # Strip those signatures from the staged application before
+      # creating the unsigned IPA.
       # =========================================================
       - name: Package unsigned IPA
         shell: bash
         run: |
           set -euo pipefail
-
           APP="$(cat "$GITHUB_WORKSPACE/build/app-path.txt")"
-
           PAYLOAD="$GITHUB_WORKSPACE/build/Payload"
           IPA="$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa"
-
           rm -rf "$PAYLOAD"
           rm -rf "$GITHUB_WORKSPACE/build/verify"
           rm -f "$IPA"
-
           mkdir -p "$PAYLOAD"
-
+          echo "========================================"
+          echo "Staging DELvEK.app"
+          echo "========================================"
           ditto \
             "$APP" \
             "$PAYLOAD/DELvEK.app"
-
+          STAGED_APP="$PAYLOAD/DELvEK.app"
+          echo
+          echo "========================================"
+          echo "Removing embedded signatures"
+          echo "========================================"
+          # Remove all _CodeSignature directories from the
+          # application and every embedded framework/bundle.
+          find "$STAGED_APP" \
+            -type d \
+            -name "_CodeSignature" \
+            -prune \
+            -exec rm -rf {} +
+          # Remove Apple's CodeResources files associated with
+          # those signatures.
+          find "$STAGED_APP" \
+            -type f \
+            -name "CodeResources" \
+            -delete
+          # Remove provisioning profiles from the unsigned artifact.
+          find "$STAGED_APP" \
+            -type f \
+            -name "embedded.mobileprovision" \
+            -delete
+          # Some nested bundles can carry provisioning profiles
+          # under alternate names/locations.
+          find "$STAGED_APP" \
+            -type f \
+            -name "*.mobileprovision" \
+            -delete
+          echo
+          echo "Remaining _CodeSignature directories:"
+          REMAINING_SIGNATURES="$(
+            find "$STAGED_APP" \
+              -type d \
+              -name "_CodeSignature" \
+              -print
+          )"
+          if [ -n "$REMAINING_SIGNATURES" ]; then
+            echo "::error::Failed to remove embedded code signatures:"
+            echo "$REMAINING_SIGNATURES"
+            exit 1
+          fi
+          echo "None."
+          echo
+          echo "Remaining provisioning profiles:"
+          REMAINING_PROFILES="$(
+            find "$STAGED_APP" \
+              -type f \
+              \( \
+                -name "embedded.mobileprovision" \
+                -o \
+                -name "*.mobileprovision" \
+              \) \
+              -print
+          )"
+          if [ -n "$REMAINING_PROFILES" ]; then
+            echo "::error::Failed to remove provisioning profiles:"
+            echo "$REMAINING_PROFILES"
+            exit 1
+          fi
+          echo "None."
+          echo
+          echo "========================================"
+          echo "Creating IPA"
+          echo "========================================"
           cd "$GITHUB_WORKSPACE/build"
-
           /usr/bin/zip \
             -qry \
             "$IPA" \
             Payload
-
           rm -rf "$PAYLOAD"
-
+          echo
           echo "Created unsigned IPA:"
           ls -lh "$IPA"
-
       # =========================================================
       # VERIFY IPA
       # =========================================================
@@ -585,87 +526,85 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           IPA="$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa"
           VERIFY="$GITHUB_WORKSPACE/build/verify"
           APP="$VERIFY/Payload/DELvEK.app"
-
           rm -rf "$VERIFY"
           mkdir -p "$VERIFY"
-
           /usr/bin/unzip \
             -q \
             "$IPA" \
             -d "$VERIFY"
-
           if [ ! -d "$APP" ]; then
             echo "::error::Packaged DELvEK.app was not found."
             exit 1
           fi
-
           echo "========================================"
           echo "Bundle information"
           echo "========================================"
-
           /usr/libexec/PlistBuddy \
             -c 'Print :CFBundleIdentifier' \
             "$APP/Info.plist"
-
           /usr/libexec/PlistBuddy \
             -c 'Print :CFBundleDisplayName' \
             "$APP/Info.plist" \
             || true
-
           /usr/libexec/PlistBuddy \
             -c 'Print :CFBundleShortVersionString' \
             "$APP/Info.plist" \
             || true
-
           /usr/libexec/PlistBuddy \
             -c 'Print :CFBundleVersion' \
             "$APP/Info.plist" \
             || true
-
           echo
           echo "========================================"
-          echo "Signature directories"
+          echo "Signature verification"
           echo "========================================"
-
           SIGNATURE_DIRS="$(
             find "$APP" \
               -type d \
               -name '_CodeSignature' \
               -print
           )"
-
           if [ -n "$SIGNATURE_DIRS" ]; then
             echo "::error::Unsigned artifact contains _CodeSignature:"
             echo "$SIGNATURE_DIRS"
             exit 1
           fi
-
-          if [ -f "$APP/embedded.mobileprovision" ]; then
-            echo "::error::Unsigned artifact contains embedded.mobileprovision."
+          PROVISIONING_PROFILES="$(
+            find "$APP" \
+              -type f \
+              \( \
+                -name 'embedded.mobileprovision' \
+                -o \
+                -name '*.mobileprovision' \
+              \) \
+              -print
+          )"
+          if [ -n "$PROVISIONING_PROFILES" ]; then
+            echo "::error::Unsigned artifact contains provisioning profiles:"
+            echo "$PROVISIONING_PROFILES"
             exit 1
           fi
-
           echo "No _CodeSignature directories found."
-          echo "No embedded.mobileprovision found."
-
+          echo "No provisioning profiles found."
           echo
           echo "codesign inspection:"
-          codesign -dvv "$APP" 2>&1 || true
-
+          codesign \
+            -dvv \
+            "$APP" \
+            2>&1 || true
           echo
           echo "========================================"
           echo "IPA contents"
           echo "========================================"
-
           /usr/bin/unzip \
             -l \
             "$IPA" \
             | head -100
-
+          echo
+          echo "Unsigned IPA verification passed."
       # =========================================================
       # CHECKSUM
       # =========================================================
@@ -673,13 +612,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           shasum \
             -a 256 \
             "$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa" \
             | tee \
               "$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa.sha256"
-
       # =========================================================
       # ARTIFACT
       # =========================================================
