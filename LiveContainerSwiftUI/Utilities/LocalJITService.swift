@@ -56,34 +56,19 @@ public final class LocalJITService: NSObject {
     }
 
     public var pairingFileURL: URL {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return documents.appendingPathComponent("StikJIT/pairingFile.plist")
+        DELvEKPairingStore.shared.pairingURL
     }
 
     public var hasPairingFile: Bool {
-        FileManager.default.fileExists(atPath: pairingFileURL.path)
+        DELvEKPairingStore.shared.exists
     }
 
     public func storePairingFile(from source: URL) throws {
-        let fm = FileManager.default
-        let directory = pairingFileURL.deletingLastPathComponent()
-        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
-        guard source.startAccessingSecurityScopedResource() else {
-            throw NSError(domain: "DELvEKJIT", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to access the selected pairing file."])
-        }
-        defer { source.stopAccessingSecurityScopedResource() }
-        let data = try Data(contentsOf: source)
-        guard !data.isEmpty else {
-            throw NSError(domain: "DELvEKJIT", code: 2, userInfo: [NSLocalizedDescriptionKey: "The pairing file is empty."])
-        }
-        let temp = directory.appendingPathComponent("pairingFile.plist.tmp")
-        try data.write(to: temp, options: .atomic)
-        if fm.fileExists(atPath: pairingFileURL.path) { try fm.removeItem(at: pairingFileURL) }
-        try fm.moveItem(at: temp, to: pairingFileURL)
+        _ = try DELvEKPairingStore.shared.importPairing(from: source)
     }
 
     public func removePairingFile() {
-        try? FileManager.default.removeItem(at: pairingFileURL)
+        DELvEKPairingStore.shared.remove()
     }
 
     public func enableJIT(targetPID: Int32 = getpid()) async -> Result {
