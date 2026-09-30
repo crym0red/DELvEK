@@ -271,43 +271,60 @@ struct DELvEKSigningView: View {
         }
     }
 
+    private var verificationForm: some View {
+        Form(content: {
+            Section {
+                Text("Apple requires verification when the account signs in from a new device or session.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                VStack(spacing: 10) {
+                    verificationButton(.trustedDevice, title: "Apple Devices (Recommended)", icon: "apple.logo")
+                    verificationButton(.sms, title: "Text Message (SMS)", icon: "message.fill")
+                    verificationButton(.phone, title: "Phone Call", icon: "phone.fill")
+                }
+
+                SecureField("Verification Code", text: $verificationCode)
+                    .keyboardType(.numberPad)
+
+                Button("Submit Verification Code") {
+                    backendAction = "Verification UI is ready. The Apple authentication backend still needs to submit the code and continue pairing."
+                    showVerification = false
+                    showBackendPlaceholder = true
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(verificationCode.isEmpty)
+            } header: {
+                Text("Verification")
+            }
+        })
+    }
+
+    @ViewBuilder
     private var verificationSheet: some View {
-        NavigationView {
-            Form(content: {
-                Section {
-                    Text("Apple requires verification when the account signs in from a new device or session.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    VStack(spacing: 10) {
-                        verificationButton(.trustedDevice, title: "Apple Devices (Recommended)", icon: "apple.logo")
-                        verificationButton(.sms, title: "Text Message (SMS)", icon: "message.fill")
-                        verificationButton(.phone, title: "Phone Call", icon: "phone.fill")
+        if #available(iOS 16.0, *) {
+            NavigationStack {
+                verificationForm
+                    .navigationTitle("Apple Verification")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showVerification = false }
+                        }
                     }
-
-                    SecureField("Verification Code", text: $verificationCode)
-                        .keyboardType(.numberPad)
-
-                    Button("Submit Verification Code") {
-                        backendAction = "Verification UI is ready. The Apple authentication backend still needs to submit the code and continue pairing."
-                        showVerification = false
-                        showBackendPlaceholder = true
+            }
+            .presentationDetents([.medium, .large])
+        } else {
+            NavigationView {
+                verificationForm
+                    .navigationTitle("Apple Verification")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showVerification = false }
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(verificationCode.isEmpty)
-                } header: {
-                    Text("Verification")
-                }
-            })
-            .navigationTitle("Apple Verification")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showVerification = false }
-                }
             }
         }
     }
-
 
     private func verificationButton(_ method: VerificationMethod, title: String, icon: String) -> some View {
         Button {
