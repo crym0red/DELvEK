@@ -2159,8 +2159,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SideStore/SideSign.git";
 			requirement = {
-				kind = branch;
-				branch = main;
+				kind = revision;
+				revision = 6b68651697f99791ef85404b7aea1891a26a285d;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
