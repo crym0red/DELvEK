@@ -7,8 +7,8 @@ struct DELvEKSigningView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Form {
-            Section {
+        Form(content: {
+            Section(content: {
                 HStack {
                     Text("Current phase")
                     Spacer()
@@ -20,11 +20,11 @@ struct DELvEKSigningView: View {
                 Text(manager.message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            } header: {
+            }, header: {
                 Text("Pipeline")
-            }
+            })
 
-            Section {
+            Section(content: {
                 statusRow("Pairing", manager.snapshot.pairing.isValid ? "Valid" : "Required", ok: manager.snapshot.pairing.isValid)
                 statusRow("Format", manager.snapshot.pairing.format, ok: manager.snapshot.pairing.isValid)
                 HStack {
@@ -41,48 +41,48 @@ struct DELvEKSigningView: View {
                         manager.removePairing()
                     }
                 }
-            } footer: {
-                Text("DELvEK preserves the native pairing record instead of converting iOS 26.x RSD/CoreDevice data into the legacy format.")
-            } header: {
+            }, header: {
                 Text("Device")
-            }
+            }, footer: {
+                Text("DELvEK preserves the native pairing record instead of converting iOS 26.x RSD/CoreDevice data into the legacy format.")
+            })
 
-            Section {
+            Section(content: {
                 statusRow("Certificate", manager.snapshot.certificate.isInstalled ? (manager.snapshot.certificate.commonName ?? "Installed") : "Not installed", ok: manager.snapshot.certificate.isInstalled)
                 HStack {
                     Text("Team ID")
                     Spacer()
-                    Text(manager.snapshot.certificate.teamIdentifier ?? "â")
+                    Text(manager.snapshot.certificate.teamIdentifier ?? "—")
                         .foregroundStyle(.secondary)
                 }
                 statusRow("Provisioning", manager.snapshot.provisioning.isValid ? "Valid" : "Not available", ok: manager.snapshot.provisioning.isValid)
-            } header: {
+            }, header: {
                 Text("Development Signing")
-            }
+            })
 
-            Section {
+            Section(content: {
                 statusRow("Local API", manager.snapshot.localAPIReady ? "Available" : "Unavailable", ok: manager.snapshot.localAPIReady)
                 statusRow("StikJIT", "Integrated", ok: true)
                 statusRow("iOS 26.x pairing", "RSD-aware", ok: true)
-            } header: {
+            }, header: {
                 Text("Local Services")
-            }
+            })
 
-            Section {
+            Section(content: {
                 ForEach(DELvEKSigningPhase.allCases) { phase in
                     HStack {
                         Image(systemName: phase.rawValue <= manager.currentPhase.rawValue ? "checkmark.circle.fill" : "circle")
                         Text("\(phase.rawValue). \(phase.title)")
                     }
                 }
-            } header: {
+            }, header: {
                 Text("Nine phases")
-            }
+            })
 
-            Section {
+            Section(content: {
                 Button("Refresh DELvEK Signing State") { manager.refresh() }
-            }
-        }
+            })
+        })
         .navigationTitle("DELvEK Signing")
         .fileImporter(
             isPresented: $showPairingImporter,
@@ -101,7 +101,13 @@ struct DELvEKSigningView: View {
                 errorMessage = error.localizedDescription
             }
         }
-        .alert("DELvEK Pairing", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+        .alert(
+            "DELvEK Pairing",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
             Button("OK") { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
