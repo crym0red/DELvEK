@@ -1,5 +1,4 @@
 import Foundation
-import Combine
 import Security
 
 /// Coordinates the nine DELvEK phases. The manager is intentionally split from
@@ -12,10 +11,7 @@ public final class DELvEKSigningManager: ObservableObject {
     @Published public private(set) var currentPhase: DELvEKSigningPhase = .pairing
     @Published public private(set) var message = ""
 
-    private init() {
-        DELvEKRSDTransport.shared.start()
-        refresh()
-    }
+    private init() { refresh() }
 
     public func refresh() {
         let pairing = DELvEKPairingStore.shared.loadStatus()
@@ -25,7 +21,7 @@ public final class DELvEKSigningManager: ObservableObject {
             pairing: pairing,
             certificate: certificate,
             provisioning: provisioning,
-            localAPIReady: DELvEKRSDTransport.shared.localDevVPNAvailable && LocalJITService.shared.isAvailable,
+            localAPIReady: LocalJITService.shared.isAvailable,
             developerModeKnown: false,
             developerModeEnabled: nil
         )
@@ -35,28 +31,6 @@ public final class DELvEKSigningManager: ObservableObject {
 
     public func importPairing(from url: URL) throws {
         _ = try DELvEKPairingStore.shared.importPairing(from: url)
-        refresh()
-        _ = DELvEKRSDTransport.shared.attach(pairing: snapshot.pairing)
-    }
-
-    public func pairCurrentDevice() throws {
-        guard snapshot.pairing.isValid else {
-            throw NSError(domain: "DELvEKSigning", code: 10, userInfo: [NSLocalizedDescriptionKey: "DELvEK needs a native iOS 26.x pairing record before it can attach the CoreDevice/RSD transport."])
-        }
-        switch DELvEKRSDTransport.shared.attach(pairing: snapshot.pairing) {
-        case .ready:
-            refresh()
-        case .failure(let message):
-            throw NSError(domain: "DELvEKSigning", code: 11, userInfo: [NSLocalizedDescriptionKey: message])
-        }
-    }
-
-    public func prepareAppleSigning(appleID: String, password: String) async throws {
-        // The password is deliberately consumed only for the live authentication call.
-        // It is never persisted by DELvEK.
-        _ = password
-        try DELvEKAppleSigningBackend.shared.prepareAccount(appleID)
-        try DELvEKAppleSigningBackend.shared.prepareCSR()
         refresh()
     }
 

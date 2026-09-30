@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		0759AEE12F29384E00301332 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 0759AEE02F29384E00301332 /* Kingfisher */; };
-		D3A4A6F22F29384E00301332 /* SideSign in Frameworks */ = {isa = PBXBuildFile; productRef = D3A4A6F12F29384E00301332 /* SideSign */; };
 		07BB58BF2F293760003E7410 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 07BB58BE2F293760003E7410 /* Kingfisher */; };
 		173545AF2E2C7913001B3B4C /* SideStoreSupport.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 173545A82E2C7913001B3B4C /* SideStoreSupport.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		17413FBC2D9C0BAE00F3F928 /* LiveContainerSwiftUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 17413FB52D9C0BAE00F3F928 /* LiveContainerSwiftUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -375,7 +374,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				0759AEE12F29384E00301332 /* Kingfisher in Frameworks */,
-				D3A4A6F22F29384E00301332 /* SideSign in Frameworks */,
 				E16D95752E1CD2B90068EB63 /* LiveContainerShared.framework in Frameworks */,
 				174140D62D9C176F00F3F928 /* libarchive.tbd in Frameworks */,
 			);
@@ -610,7 +608,8 @@
 			name = LiveContainerSwiftUI;
 			packageProductDependencies = (
 				0759AEE02F29384E00301332 /* Kingfisher */,
-                D3A4A6F12F29384E00301332 /* SideSign */,
+				D3A100000000000000000011 /* SideSign */,
+				D3A100000000000000000012 /* Minimuxer */,
 			);
 			productName = LiveContainerSwiftUI;
 			productReference = 17413FB52D9C0BAE00F3F928 /* LiveContainerSwiftUI.framework */;
@@ -895,7 +894,8 @@
 			mainGroup = 17DCE9942C7067EC00731D42;
 			packageReferences = (
 				07BB58BD2F293760003E7410 /* XCRemoteSwiftPackageReference "Kingfisher" */,
-                D3A4A6F02F293760003E7410 /* XCRemoteSwiftPackageReference "SideSign" */,
+				D3A100000000000000000001 /* XCRemoteSwiftPackageReference "SideSign" */,
+				D3A100000000000000000002 /* XCRemoteSwiftPackageReference "MinimuxerPackage" */,
 			);
 			preferredProjectObjectVersion = 56;
 			productRefGroup = 17DCE99E2C7067EC00731D42 /* Products */;
@@ -2147,20 +2147,28 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		D3A100000000000000000001 /* XCRemoteSwiftPackageReference "SideSign" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SideStore/SideSign.git";
+			requirement = {
+				kind = branch;
+				branch = main;
+			};
+		};
+		D3A100000000000000000002 /* XCRemoteSwiftPackageReference "MinimuxerPackage" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SideStore/MinimuxerPackage.git";
+			requirement = {
+				kind = branch;
+				branch = main;
+			};
+		};
 		07BB58BD2F293760003E7410 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 8.6.2;
-			};
-		};
-		D3A4A6F02F293760003E7410 /* XCRemoteSwiftPackageReference "SideSign" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/SideStore/SideSign.git";
-			requirement = {
-				kind = revision;
-				revision = 6b68651697f99791ef85404b7aea1891a26a285d;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -2176,10 +2184,15 @@
 			package = 07BB58BD2F293760003E7410 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
 		};
-		D3A4A6F12F29384E00301332 /* SideSign */ = {
+		D3A100000000000000000011 /* SideSign */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = D3A4A6F02F293760003E7410 /* XCRemoteSwiftPackageReference "SideSign" */;
+			package = D3A100000000000000000001 /* XCRemoteSwiftPackageReference "SideSign" */;
 			productName = SideSign;
+		};
+		D3A100000000000000000012 /* Minimuxer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D3A100000000000000000002 /* XCRemoteSwiftPackageReference "MinimuxerPackage" */;
+			productName = Minimuxer;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
