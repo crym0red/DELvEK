@@ -41,10 +41,10 @@ struct DELvEKSigningView: View {
                         manager.removePairing()
                     }
                 }
-            } header: {
-                Text("Device")
             } footer: {
                 Text("DELvEK preserves the native pairing record instead of converting iOS 26.x RSD/CoreDevice data into the legacy format.")
+            } header: {
+                Text("Device")
             }
 
             Section {
