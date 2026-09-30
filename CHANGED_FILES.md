@@ -1,10 +1,7 @@
-DELvEK upstream API + SwiftPM resolution update
+# SwiftPM build fix
 
-Changed:
-- .github/workflows/build.yml
-  - Clears Xcode/SwiftPM caches completely.
-  - Resolves packages into build/DerivedData explicitly.
-  - Verifies the resulting checkout graph before compilation.
-  - Emits package-resolution diagnostics for swift-crypto identity conflicts.
+Updated `.github/workflows/build.yml`.
 
-The project dependency graph itself was not duplicated or rewritten. SideSign/Minimuxer remain the upstream package references; the workflow now uses one clean DerivedData/SourcePackages graph for both resolution and build.
+The diagnostic showed package resolution succeeded, then the build step deleted the exact `build/DerivedData` directory containing that resolved graph. Xcode 26.2 subsequently attempted to resolve/open the same packages again and encountered missing checkout containers, including GSACryptoKit and libdeflate.
+
+This patch keeps the resolved DerivedData for the build and makes `-showBuildSettings` use the same DerivedData path.
