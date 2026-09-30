@@ -8,7 +8,7 @@ struct DELvEKSigningView: View {
 
     var body: some View {
         Form {
-            Section("Pipeline") {
+            Section {
                 HStack {
                     Text("Current phase")
                     Spacer()
@@ -20,9 +20,11 @@ struct DELvEKSigningView: View {
                 Text(manager.message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            } header: {
+                Text("Pipeline")
             }
 
-            Section("Device") {
+            Section {
                 statusRow("Pairing", manager.snapshot.pairing.isValid ? "Valid" : "Required", ok: manager.snapshot.pairing.isValid)
                 statusRow("Format", manager.snapshot.pairing.format, ok: manager.snapshot.pairing.isValid)
                 HStack {
@@ -41,32 +43,40 @@ struct DELvEKSigningView: View {
                 }
             } footer: {
                 Text("DELvEK preserves the native pairing record instead of converting iOS 26.x RSD/CoreDevice data into the legacy format.")
+            } header: {
+                Text("Device")
             }
 
-            Section("Development Signing") {
+            Section {
                 statusRow("Certificate", manager.snapshot.certificate.isInstalled ? (manager.snapshot.certificate.commonName ?? "Installed") : "Not installed", ok: manager.snapshot.certificate.isInstalled)
                 HStack {
                     Text("Team ID")
                     Spacer()
-                    Text(manager.snapshot.certificate.teamIdentifier ?? "—")
+                    Text(manager.snapshot.certificate.teamIdentifier ?? "â")
                         .foregroundStyle(.secondary)
                 }
                 statusRow("Provisioning", manager.snapshot.provisioning.isValid ? "Valid" : "Not available", ok: manager.snapshot.provisioning.isValid)
+            } header: {
+                Text("Development Signing")
             }
 
-            Section("Local Services") {
+            Section {
                 statusRow("Local API", manager.snapshot.localAPIReady ? "Available" : "Unavailable", ok: manager.snapshot.localAPIReady)
                 statusRow("StikJIT", "Integrated", ok: true)
                 statusRow("iOS 26.x pairing", "RSD-aware", ok: true)
+            } header: {
+                Text("Local Services")
             }
 
-            Section("Nine phases") {
+            Section {
                 ForEach(DELvEKSigningPhase.allCases) { phase in
                     HStack {
                         Image(systemName: phase.rawValue <= manager.currentPhase.rawValue ? "checkmark.circle.fill" : "circle")
                         Text("\(phase.rawValue). \(phase.title)")
                     }
                 }
+            } header: {
+                Text("Nine phases")
             }
 
             Section {
