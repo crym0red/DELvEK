@@ -107,6 +107,15 @@ jobs:
           rm -rf "$HOME/.swiftpm"
 
           mkdir -p "$GITHUB_WORKSPACE/build/DerivedData"
+          mkdir -p "$GITHUB_WORKSPACE/build/SourcePackages"
+
+          # Xcode 26.2 can retain stale SwiftPM package identity metadata.
+          # DELvEK must resolve the graph from the current Package.swift files.
+          RESOLVED="$GITHUB_WORKSPACE/LiveContainer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+          if [ -f "$RESOLVED" ]; then
+            cp "$RESOLVED" "$GITHUB_WORKSPACE/build/Package.resolved.input"
+            rm -f "$RESOLVED"
+          fi
 
       - name: Resolve Swift packages
         shell: bash
@@ -114,6 +123,7 @@ jobs:
           set -euo pipefail
 
           DERIVED_DATA="$GITHUB_WORKSPACE/build/DerivedData"
+          CLONED_PACKAGES="$GITHUB_WORKSPACE/build/SourcePackages"
 
           echo "========================================"
           echo "Resolving Swift packages"
@@ -123,14 +133,15 @@ jobs:
             -resolvePackageDependencies \
             -project "$GITHUB_WORKSPACE/LiveContainer.xcodeproj" \
             -scheme "LiveContainer" \
-            -derivedDataPath "$DERIVED_DATA"
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$CLONED_PACKAGES"
 
       - name: Verify resolved Swift packages
         shell: bash
         run: |
           set -euo pipefail
 
-          CHECKOUTS="$GITHUB_WORKSPACE/build/DerivedData/SourcePackages/checkouts"
+          CHECKOUTS="$GITHUB_WORKSPACE/build/SourcePackages/checkouts"
           WORKSPACE="$GITHUB_WORKSPACE/LiveContainer.xcodeproj/project.xcworkspace"
 
           echo "========================================"
@@ -146,7 +157,7 @@ jobs:
 
           echo
           echo "Package resolution metadata:"
-          find "$GITHUB_WORKSPACE/build/DerivedData/SourcePackages" \
+          find "$GITHUB_WORKSPACE/build/SourcePackages" \
             -maxdepth 3 \
             -type f \
             \( -name 'Package.resolved' -o -name 'workspace-state.json' \) \
@@ -175,6 +186,7 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath "$GITHUB_WORKSPACE/build/DerivedData" \
+            -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/build/SourcePackages" \
             -showBuildSettings > build/build-settings.txt
 
           grep -E 'PRODUCT_NAME|FULL_PRODUCT_NAME|TARGET_BUILD_DIR|WRAPPER_NAME|PRODUCT_BUNDLE_IDENTIFIER' \
@@ -198,6 +210,7 @@ jobs:
             -configuration Release \
             -destination "generic/platform=iOS" \
             -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/build/SourcePackages" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
