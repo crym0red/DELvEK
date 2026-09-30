@@ -176,9 +176,6 @@ jobs:
 
       # =========================================================
       # VERIFY XCODE
-      #
-      # IMPORTANT:
-      # Do not pipe xcodebuild -version directly into grep -q.
       # =========================================================
       - name: Verify Xcode toolchain
         shell: bash
@@ -429,10 +426,6 @@ jobs:
 
       # =========================================================
       # VALIDATE LOCALIZATION
-      #
-      # Xcode 26.2 can crash internally while processing a malformed
-      # .strings file. Validate every Localizable.strings file before
-      # xcodebuild reaches the localization phase.
       # =========================================================
       - name: Validate localization files
         shell: bash
@@ -457,21 +450,12 @@ jobs:
             echo "$FILE"
             echo "----------------------------------------"
 
-            # ---------------------------------------------------
-            # UTF-8 validation
-            # ---------------------------------------------------
             if ! iconv -f UTF-8 -t UTF-8 "$FILE" >/dev/null 2>&1; then
               echo "::error file=$FILE::File is not valid UTF-8."
               FAILED=1
               continue
             fi
 
-            # ---------------------------------------------------
-            # Normalize CRLF/CR line endings.
-            #
-            # Xcode's localization parser is sensitive to malformed
-            # line endings in some projects.
-            # ---------------------------------------------------
             TMP="${FILE}.normalized"
 
             if ! sed 's/\r$//' "$FILE" > "$TMP"; then
@@ -489,9 +473,6 @@ jobs:
               rm -f "$TMP"
             fi
 
-            # ---------------------------------------------------
-            # Property-list / .strings syntax validation
-            # ---------------------------------------------------
             if ! plutil -lint "$FILE"; then
               echo "::error file=$FILE::Invalid .strings syntax."
               FAILED=1
@@ -665,12 +646,6 @@ jobs:
 
       # =========================================================
       # REMOVE NESTED SIGNATURES
-      #
-      # Xcode may copy pre-signed third-party frameworks into the
-      # unsigned application even with CODE_SIGNING_ALLOWED=NO.
-      #
-      # Remove those signatures so the unsigned artifact is actually
-      # unsigned and can be signed cleanly later.
       # =========================================================
       - name: Strip nested code signatures
         shell: bash
@@ -729,26 +704,8 @@ jobs:
               rm -f "$PROFILE"
             done <<< "$PROFILES"
           else
-            echo "No nested provisioning profiles found."
+            echo "No embedded provisioning profiles found."
           fi
-
-          echo
-          echo "Remaining signature directories:"
-
-          find "$APP" \
-            -type d \
-            -name '_CodeSignature' \
-            -print \
-            || true
-
-          echo
-          echo "Remaining provisioning profiles:"
-
-          find "$APP" \
-            -type f \
-            -name 'embedded.mobileprovision' \
-            -print \
-            || true
 
       # =========================================================
       # PACKAGE IPA
