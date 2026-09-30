@@ -1,124 +1,74 @@
 import Foundation
 import Security
+#if canImport(SideSign)
 import SideSign
+#endif
 
-/// DELvEK's Apple-account signing backend boundary.
+/// Secure Apple-signing preparation layer.
 ///
-/// This layer deliberately keeps the Apple password ephemeral: it is passed to the
-/// authentication implementation by the caller and is never persisted by DELvEK.
-/// SideSign supplies the real Apple GSA/developer-portal/certificate primitives;
-/// this adapter owns DELvEK's state and Keychain storage around those primitives.
+/// SideSign supplies CSR generation, Apple authentication/developer-portal,
+/// certificate/profile and bundle-signing primitives. DELvEK owns orchestration
+/// and secure state; the Apple password is never persisted.
 @MainActor
-public final class DELvEKAppleSigningBackend {
+public final class DELvEKAppleSigningBackend: ObservableObject {
     public static let shared = DELvEKAppleSigningBackend()
 
-    public struct SessionState: Sendable, Equatable {
-        public var appleID: String?
-        public var authenticated: Bool
-        public var teamID: String?
-        public var certificatePrepared: Bool
-        public var csrPrepared: Bool
+    @Published public private(set) var account: String?
+    @Published public private(set) var csrReady = false
+    @Published public private(set) var lastError: String?
 
-        public init(appleID: String? = nil, authenticated: Bool = false, teamID: String? = nil, certificatePrepared: Bool = false, csrPrepared: Bool = false) {
-            self.appleID = appleID
-            self.authenticated = authenticated
-            self.teamID = teamID
-            self.certificatePrepared = certificatePrepared
-            self.csrPrepared = csrPrepared
-        }
-    }
-
-    private let service = "com.delvek.apple-signing"
-    private let accountKey = "apple-id"
-    private let csrKey = "development-csr"
-    private let privateKeyKey = "development-private-key"
-
-    private(set) var state: SessionState
+    private let keychain = DELvEKKeychain()
+    private let csrKey = "delvek.signing.csr"
+    private let privateKeyKey = "delvek.signing.privateKey"
 
     private init() {
-        let appleID = Self.readKeychain(service: service, account: accountKey).flatMap { String(data: $0, encoding: .utf8) }
-        let csr = Self.readKeychain(service: service, account: csrKey)
-        state = SessionState(appleID: appleID, csrPrepared: csr != nil)
+        csrReady = keychain.data(for: privateKeyKey) != nil && keychain.data(for: csrKey) != nil
     }
 
-    public func beginSession(appleID: String, password: String) async throws -> SessionState {
+    public func prepareAccount(_ appleID: String) throws {
         let normalized = appleID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard normalized.contains("@"), !password.isEmpty else {
-            throw BackendError.invalidCredentials
+        guard normalized.contains("@") else {
+            throw BackendError.invalidAppleID
         }
-
-        // The password intentionally remains only in this call's stack/registers.
-        // Do not write it to UserDefaults, files, analytics, or DELvEK's database.
-        try Self.writeKeychain(Data(normalized.utf8), service: service, account: accountKey)
-
-        // Generate the device-local key material needed for Apple's development
-        // certificate request. The private key remains on this device.
-        let request = try CertificateRequest(machineName: Host.current().localizedName ?? "DELvEK iPhone")
-        try Self.writeKeychain(request.csrData, service: service, account: csrKey)
-        try Self.writeKeychain(request.privateKey, service: service, account: privateKeyKey)
-
-        state.appleID = normalized
-        state.csrPrepared = true
-        state.authenticated = false
-        state.certificatePrepared = false
-        return state
+        account = normalized
     }
 
-    public func signOut() {
-        Self.deleteKeychain(service: service, account: accountKey)
-        Self.deleteKeychain(service: service, account: csrKey)
-        Self.deleteKeychain(service: service, account: privateKeyKey)
-        state = SessionState()
+    /// Generates the local private key + CSR required by Apple's development
+    /// certificate request. The Apple password is deliberately not an argument.
+    public func prepareCSR() throws {
+        #if canImport(SideSign)
+        let request = try CertificateRequest(machineName: "DELvEK")
+        try keychain.set(request.csrData, for: csrKey)
+        try keychain.set(request.privateKey, for: privateKeyKey)
+        csrReady = true
+        #else
+        throw BackendError.sideSignUnavailable
+        #endif
     }
 
-    public func storedAppleID() -> String? { state.appleID }
-
-    public func hasPreparedCSR() -> Bool { state.csrPrepared }
+    public func clearSession() {
+        account = nil
+        lastError = nil
+    }
 
     public enum BackendError: LocalizedError {
-        case invalidCredentials
-        case unavailable
-        case authenticationNotConnected
-
+        case invalidAppleID
+        case sideSignUnavailable
         public var errorDescription: String? {
             switch self {
-            case .invalidCredentials: return "Enter a valid Apple ID and password."
-            case .unavailable: return "The Apple signing backend is unavailable."
-            case .authenticationNotConnected:
-                return "The Apple GSA/developer-portal session has not completed yet. The generated CSR and device key are ready for that authenticated session."
+            case .invalidAppleID: return "Enter a valid Apple ID email address."
+            case .sideSignUnavailable: return "The SideSign package is not linked to this target."
             }
         }
     }
+}
 
-    private static func writeKeychain(_ data: Data, service: String, account: String) throws {
+private final class DELvEKKeychain {
+    func data(for key: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        ]
-        let status = SecItemAdd(query as CFDictionary, nil)
-        if status == errSecDuplicateItem {
-            let match: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service,
-                kSecAttrAccount as String: account
-            ]
-            let update: [String: Any] = [kSecValueData as String: data]
-            guard SecItemUpdate(match as CFDictionary, update as CFDictionary) == errSecSuccess else {
-                throw NSError(domain: "DELvEKAppleSigning", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Unable to update signing state in Keychain."])
-            }
-        } else if status != errSecSuccess {
-            throw NSError(domain: "DELvEKAppleSigning", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Unable to store signing state in Keychain."])
-        }
-    }
-
-    private static func readKeychain(service: String, account: String) -> Data? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrService as String: "com.delvek.signing",
+            kSecAttrAccount as String: key,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -127,12 +77,21 @@ public final class DELvEKAppleSigningBackend {
         return result as? Data
     }
 
-    private static func deleteKeychain(service: String, account: String) {
+    func set(_ data: Data, for key: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrService as String: "com.delvek.signing",
+            kSecAttrAccount as String: key
         ]
-        SecItemDelete(query as CFDictionary)
+        let attributes: [String: Any] = [kSecValueData as String: data]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var item = query
+            item[kSecValueData as String] = data
+            let addStatus = SecItemAdd(item as CFDictionary, nil)
+            guard addStatus == errSecSuccess else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(addStatus)) }
+        } else if status != errSecSuccess {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        }
     }
 }

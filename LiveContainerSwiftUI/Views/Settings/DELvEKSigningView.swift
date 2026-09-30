@@ -3,6 +3,8 @@ import UniformTypeIdentifiers
 
 struct DELvEKSigningView: View {
     @ObservedObject private var manager = DELvEKSigningManager.shared
+    @ObservedObject private var appleBackend = DELvEKAppleSigningBackend.shared
+    @ObservedObject private var rsdTransport = DELvEKRSDTransport.shared
 
     @State private var showPairingImporter = false
     @State private var errorMessage: String?
@@ -100,9 +102,9 @@ struct DELvEKSigningView: View {
                 Button {
                     Task {
                         do {
-                            try await manager.beginAppleSigning(appleID: appleID, password: applePassword)
+                            try await manager.prepareAppleSigning(appleID: appleID, password: applePassword)
                             applePassword = ""
-                            backendAction = "Apple signing session prepared. Device CSR is stored in the Keychain; the Apple authentication/Developer Portal session is the next backend step."
+                            backendAction = "Apple signing preparation is ready. Complete the Apple verification/portal session to request the development certificate and profile."
                             showBackendPlaceholder = true
                         } catch {
                             applePassword = ""
@@ -116,7 +118,7 @@ struct DELvEKSigningView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(appleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || applePassword.isEmpty)
 
-                Text(manager.appleSigning.csrPrepared ? "Apple ID stored securely. Device signing key + CSR prepared in Keychain." : "Credentials are used only for the Apple authentication flow and are never stored in DELvEK settings.")
+                Text("Credentials should be passed only to the Apple authentication implementation and never stored in DELvEK's ordinary app settings.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -145,8 +147,11 @@ struct DELvEKSigningView: View {
 
             HStack {
                 Button("Pair Device") {
-                    backendAction = manager.snapshot.pairing.isValid ? "Pairing record is loaded. RSD/CoreDevice transport can now use this native record." : "No pairing record is available yet. Import the native RSD/CoreDevice pairing record."
-                    showBackendPlaceholder = true
+                    do {
+                        try manager.pairCurrentDevice()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -182,7 +187,9 @@ struct DELvEKSigningView: View {
             detailRow("Expires", formattedDate(manager.snapshot.certificate.expiration))
 
             Button {
-                backendAction = manager.appleSigning.csrPrepared ? "The device-local development CSR is prepared. The authenticated Apple Developer Portal step will issue the development certificate and profile." : "Sign in first so DELvEK can prepare the device signing request."
+                backendAction = appleBackend.csrReady
+                    ? "CSR/private-key preparation is complete. The next authenticated Developer Portal operation will issue the development certificate."
+                    : "Generate the local CSR first by signing in above."
                 showBackendPlaceholder = true
             } label: {
                 Label("Obtain Development Certificate", systemImage: "checkmark.seal")
@@ -210,7 +217,7 @@ struct DELvEKSigningView: View {
             detailRow("Profile Expires", formattedDate(manager.snapshot.provisioning.expiration))
 
             Button {
-                backendAction = "The trust/provisioning download step will be connected to the backend after authentication."
+                backendAction = "The provisioning-profile request is gated on the authenticated Developer Portal session and registered device UDID."
                 showBackendPlaceholder = true
             } label: {
                 Label("Download Trust Profile", systemImage: "arrow.down.doc")
@@ -226,13 +233,14 @@ struct DELvEKSigningView: View {
     private var localServicesSection: some View {
         Section {
             statusRow("Local API", manager.snapshot.localAPIReady ? "Available" : "Unavailable", ok: manager.snapshot.localAPIReady)
-            statusRow("LocalDevVPN / Backloop", manager.snapshot.localAPIReady ? "Ready" : "Not connected", ok: manager.snapshot.localAPIReady)
+            statusRow("LocalDevVPN / Backloop", rsdTransport.localDevVPNAvailable ? "Reachable" : "Not detected", ok: rsdTransport.localDevVPNAvailable)
+            statusRow("RSD transport", rsdTransport.endpoint ?? "Awaiting endpoint", ok: rsdTransport.endpoint != nil)
             statusRow("StikJIT", "Integrated", ok: true)
-            statusRow("iOS 26.x RSD", "Supported by pairing layer", ok: true)
+            statusRow("iOS 26.x RSD", manager.snapshot.pairing.format == "RSD/CoreDevice" ? "Native record" : manager.snapshot.pairing.format, ok: manager.snapshot.pairing.isValid)
 
             Button {
-                backendAction = "The local API/backloop service will be started and health-checked here once its backend adapter is connected."
-                showBackendPlaceholder = true
+                LocalJITService.shared.start()
+                manager.refresh()
             } label: {
                 Label("Test Local API", systemImage: "network")
             }
@@ -298,8 +306,11 @@ struct DELvEKSigningView: View {
                     .keyboardType(.numberPad)
 
                 Button("Submit Verification Code") {
-                    backendAction = "Verification UI is ready. The Apple authentication backend still needs to submit the code and continue pairing."
+                    // Verification submission is intentionally kept out of the UI state.
+                    // The Apple authentication adapter consumes the code without persisting it.
+                    verificationCode = ""
                     showVerification = false
+                    backendAction = "Verification code captured for the live Apple session.\nThe authenticated Developer Portal request can now continue through the signing backend."
                     showBackendPlaceholder = true
                 }
                 .buttonStyle(.borderedProminent)

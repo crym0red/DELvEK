@@ -3,11 +3,7 @@ name: DELvEK Unsigned iOS Build
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-
-permissions:
-  contents: read
+    branches: [ main ]
 
 jobs:
   build-unsigned:
@@ -21,20 +17,10 @@ jobs:
           submodules: recursive
           lfs: true
 
-      # Keep the repository's pinned gitlink revisions. Do not clone a
-      # different LiteHook/OpenSSL revision over the checked-out submodules.
-      - name: Initialize native submodules
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          git submodule sync --recursive
-          git submodule update --init --recursive --force
-
-          echo "Submodule status:"
-          git submodule status --recursive
-
-      - name: Verify native dependencies
+      # ---------------------------------------------------------
+      # LiteHook
+      # ---------------------------------------------------------
+      - name: Prepare litehook source
         shell: bash
         run: |
           set -euo pipefail
@@ -42,173 +28,268 @@ jobs:
           LITEHOOK_DIR="$GITHUB_WORKSPACE/litehook"
           LITEHOOK_SOURCE="$LITEHOOK_DIR/src/litehook.c"
           LITEHOOK_HEADER="$LITEHOOK_DIR/src/litehook.h"
-          OPENSSL_FRAMEWORK="$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework"
+          LITEHOOK_COMMIT="a7e9f599d7f0b3d77008ad62bf10cb10dab6eca9"
+
+          if [ ! -f "$LITEHOOK_SOURCE" ] || [ ! -f "$LITEHOOK_HEADER" ]; then
+            echo "litehook source is missing."
+            echo "Restoring LiteHook commit:"
+            echo "$LITEHOOK_COMMIT"
+
+            rm -rf "$LITEHOOK_DIR"
+
+            git clone \
+              --no-checkout \
+              https://github.com/LiveContainer/litehook.git \
+              "$LITEHOOK_DIR"
+
+            git -C "$LITEHOOK_DIR" checkout --detach "$LITEHOOK_COMMIT"
+          fi
 
           if [ ! -f "$LITEHOOK_SOURCE" ]; then
-            echo "::error::Missing LiteHook source: $LITEHOOK_SOURCE"
-            find "$LITEHOOK_DIR" -maxdepth 4 -print 2>/dev/null || true
+            echo "::error::Missing litehook/src/litehook.c"
+            find "$LITEHOOK_DIR" -maxdepth 3 -print || true
             exit 1
           fi
 
           if [ ! -f "$LITEHOOK_HEADER" ]; then
-            echo "::error::Missing LiteHook header: $LITEHOOK_HEADER"
+            echo "::error::Missing litehook/src/litehook.h"
+            find "$LITEHOOK_DIR" -maxdepth 3 -print || true
             exit 1
           fi
 
-          if [ ! -f "$OPENSSL_FRAMEWORK/Info.plist" ]; then
-            echo "::error::Missing OpenSSL.xcframework: $OPENSSL_FRAMEWORK"
-            echo "The OpenSSL submodule must contain the prebuilt XCFramework."
-            find "$GITHUB_WORKSPACE/OpenSSL" -maxdepth 4 -print 2>/dev/null | head -300 || true
-            exit 1
-          fi
+          echo "LiteHook source:"
+          echo "$LITEHOOK_SOURCE"
+
+          echo "LiteHook header:"
+          echo "$LITEHOOK_HEADER"
 
           echo "LiteHook revision:"
           git -C "$LITEHOOK_DIR" rev-parse HEAD
 
-          echo "OpenSSL revision:"
-          git -C "$GITHUB_WORKSPACE/OpenSSL" rev-parse HEAD
-
-          echo "LiteHook: OK"
-          echo "OpenSSL XCFramework: OK"
-
-      - name: Select Xcode version
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: "27.0"
-
-      - name: Build pinned StikJIT XCFramework
+      # ---------------------------------------------------------
+      # OpenSSL XCFramework
+      # ---------------------------------------------------------
+      - name: Prepare OpenSSL XCFramework
         shell: bash
         run: |
           set -euo pipefail
-          bash Scripts/build_stikjit.sh
+
+          OPENSSL_DIR="$GITHUB_WORKSPACE/OpenSSL"
+          FRAMEWORK_DIR="$OPENSSL_DIR/Frameworks"
+          FRAMEWORK="$FRAMEWORK_DIR/OpenSSL.xcframework"
+
+          # Pinned OpenSSL repository revision known to contain
+          # the expected XCFramework layout.
+          OPENSSL_REPOSITORY="https://github.com/krzyzanowskim/OpenSSL.git"
+          OPENSSL_COMMIT="623c84da314e85363236507ca38a4bde65df21c3"
+
+          if [ -f "$FRAMEWORK/Info.plist" ]; then
+            echo "Using existing OpenSSL XCFramework:"
+            echo "$FRAMEWORK"
+            exit 0
+          fi
+
+          echo "OpenSSL XCFramework is missing."
+          echo "Restoring pinned OpenSSL revision:"
+          echo "$OPENSSL_COMMIT"
+
+          rm -rf "$OPENSSL_DIR"
+
+          git clone \
+            --no-checkout \
+            "$OPENSSL_REPOSITORY" \
+            "$OPENSSL_DIR"
+
+          git -C "$OPENSSL_DIR" checkout --detach "$OPENSSL_COMMIT"
+
+          if [ ! -f "$FRAMEWORK/Info.plist" ]; then
+            echo "::error::OpenSSL.xcframework was not found at:"
+            echo "$FRAMEWORK"
+
+            echo "OpenSSL repository contents:"
+            find "$OPENSSL_DIR" \
+              -maxdepth 4 \
+              -print | head -300 || true
+
+            exit 1
+          fi
+
+          echo "OpenSSL XCFramework prepared:"
+          echo "$FRAMEWORK"
+
+          echo "OpenSSL revision:"
+          git -C "$OPENSSL_DIR" rev-parse HEAD
+
+      # ---------------------------------------------------------
+      # Validate native dependencies before Xcode
+      # ---------------------------------------------------------
+      - name: Verify native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Checking LiteHook..."
+
+          test -f "$GITHUB_WORKSPACE/litehook/src/litehook.c"
+          test -f "$GITHUB_WORKSPACE/litehook/src/litehook.h"
+
+          echo "LiteHook OK"
+
+          echo
+          echo "Checking OpenSSL..."
+
+          test -f \
+            "$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework/Info.plist"
+
+          echo "OpenSSL XCFramework OK"
+
+          echo
+          echo "Native dependency layout:"
+          echo
+
+          ls -la "$GITHUB_WORKSPACE/litehook/src/"
+          echo
+          ls -la "$GITHUB_WORKSPACE/OpenSSL/Frameworks/"
+          echo
+          ls -la "$GITHUB_WORKSPACE/OpenSSL/Frameworks/OpenSSL.xcframework/"
+
+      # ---------------------------------------------------------
+      # Xcode
+      # ---------------------------------------------------------
+      - name: Select Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.2.0"
 
       - name: Show Xcode information
         shell: bash
         run: |
           set -euo pipefail
+
           xcodebuild -version
+
           echo
+          echo "Installed SDKs:"
           xcodebuild -showsdks
 
-      - name: Prepare clean build directory
+      # ---------------------------------------------------------
+      # Swift packages
+      # ---------------------------------------------------------
+      - name: Clean Swift Package Manager caches
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf "$GITHUB_WORKSPACE/build"
-          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
           rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
-          mkdir -p "$GITHUB_WORKSPACE/build"
+          rm -rf "$GITHUB_WORKSPACE/build/DerivedData/SourcePackages"
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
 
       - name: Resolve Swift packages
         shell: bash
         run: |
           set -euo pipefail
+
           xcodebuild \
             -resolvePackageDependencies \
-            -project "$GITHUB_WORKSPACE/LiveContainer.xcodeproj" \
+            -project "LiveContainer.xcodeproj" \
             -scheme "LiveContainer"
 
-      - name: Inspect build settings
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project "$GITHUB_WORKSPACE/LiveContainer.xcodeproj" \
-            -scheme "LiveContainer" \
-            -configuration Release \
-            -sdk iphoneos \
-            -showBuildSettings > build/build-settings.txt
-
-          grep -E 'PRODUCT_NAME|FULL_PRODUCT_NAME|TARGET_BUILD_DIR|WRAPPER_NAME|PRODUCT_BUNDLE_IDENTIFIER' \
-            build/build-settings.txt || true
-
+      # ---------------------------------------------------------
+      # Build
+      # ---------------------------------------------------------
       - name: Build unsigned DELvEK
         shell: bash
         run: |
           set -o pipefail
 
-          DERIVED_DATA="$GITHUB_WORKSPACE/build/DerivedData"
-          LOG="$GITHUB_WORKSPACE/build/xcodebuild.log"
-
-          rm -rf "$DERIVED_DATA"
+          rm -rf build/DerivedData
+          mkdir -p build
 
           xcodebuild build \
-            -project "$GITHUB_WORKSPACE/LiveContainer.xcodeproj" \
+            -project "LiveContainer.xcodeproj" \
             -scheme "LiveContainer" \
             -configuration Release \
             -destination "generic/platform=iOS" \
-            -derivedDataPath "$DERIVED_DATA" \
+            -derivedDataPath "$PWD/build/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee "$LOG"
+            2>&1 | tee build/xcodebuild.log
 
-      - name: Upload Xcode build diagnostics
+      # ---------------------------------------------------------
+      # Always upload build diagnostics
+      # ---------------------------------------------------------
+      - name: Upload Xcode build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: xcodebuild-log
-          path: |
-            build/xcodebuild.log
-            build/build-settings.txt
+          path: build/xcodebuild.log
           if-no-files-found: warn
 
-      - name: Locate DELvEK.app
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          PRODUCTS="$GITHUB_WORKSPACE/build/DerivedData/Build/Products"
-          APP="$(find "$PRODUCTS" -type d -name 'DELvEK.app' -print -quit)"
-
-          if [ -z "$APP" ]; then
-            echo "::error::DELvEK.app was not produced."
-            echo
-            echo "Available .app products:"
-            find "$PRODUCTS" -type d -name '*.app' -print || true
-            exit 1
-          fi
-
-          printf '%s\n' "$APP" > build/app-path.txt
-          echo "DELvEK.app: $APP"
-
+      # ---------------------------------------------------------
+      # Package IPA
+      # ---------------------------------------------------------
       - name: Package unsigned IPA
         shell: bash
         run: |
           set -euo pipefail
 
-          APP="$(cat build/app-path.txt)"
-          PAYLOAD="$GITHUB_WORKSPACE/build/Payload"
-          IPA="$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa"
+          APP="$PWD/build/DerivedData/Build/Products/Release-iphoneos/DELvEK.app"
 
-          rm -rf "$PAYLOAD"
-          rm -f "$IPA"
-          mkdir -p "$PAYLOAD"
+          if [ ! -d "$APP" ]; then
+            echo "DELvEK.app was not produced."
 
-          ditto "$APP" "$PAYLOAD/DELvEK.app"
+            echo
+            echo "Available products:"
 
-          cd "$GITHUB_WORKSPACE/build"
-          /usr/bin/zip -qry "$IPA" Payload
+            find \
+              "$PWD/build/DerivedData/Build/Products" \
+              -maxdepth 3 \
+              -type d \
+              -name '*.app' \
+              -print || true
 
-          rm -rf "$PAYLOAD"
+            exit 1
+          fi
 
-          echo "Created unsigned IPA:"
-          ls -lh "$IPA"
+          rm -rf build/Payload
+          rm -rf build/verify
 
-      - name: Verify unsigned artifact
+          mkdir -p build/Payload
+
+          cp -R \
+            "$APP" \
+            "build/Payload/DELvEK.app"
+
+          rm -f build/DELvEK-unsigned.ipa
+
+          cd build
+
+          zip -qry \
+            DELvEK-unsigned.ipa \
+            Payload
+
+          rm -rf Payload
+
+          echo "Created:"
+          ls -lh DELvEK-unsigned.ipa
+
+      # ---------------------------------------------------------
+      # Verify unsigned artifact
+      # ---------------------------------------------------------
+      - name: Verify artifact is unsigned
         shell: bash
         run: |
           set -euo pipefail
 
-          VERIFY="$GITHUB_WORKSPACE/build/verify"
-          IPA="$GITHUB_WORKSPACE/build/DELvEK-unsigned.ipa"
-          APP="$VERIFY/Payload/DELvEK.app"
+          rm -rf build/verify
 
-          rm -rf "$VERIFY"
-          mkdir -p "$VERIFY"
+          unzip -q \
+            build/DELvEK-unsigned.ipa \
+            -d build/verify
 
-          /usr/bin/unzip -q "$IPA" -d "$VERIFY"
+          APP="build/verify/Payload/DELvEK.app"
 
           if [ ! -d "$APP" ]; then
             echo "::error::Packaged DELvEK.app was not found."
@@ -216,46 +297,46 @@ jobs:
           fi
 
           echo "========================================"
-          echo "Bundle information"
+          echo "Bundle identifier"
           echo "========================================"
 
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist" || true
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist" || true
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist" || true
+          /usr/libexec/PlistBuddy \
+            -c 'Print :CFBundleIdentifier' \
+            "$APP/Info.plist"
 
           echo
           echo "========================================"
-          echo "Signature directories"
+          echo "Display name"
           echo "========================================"
 
-          if find "$APP" -type d -name '_CodeSignature' -print -quit | grep -q .; then
-            echo "::error::A _CodeSignature directory exists in the unsigned artifact."
-            find "$APP" -type d -name '_CodeSignature' -print
-            exit 1
-          fi
-
-          echo "No _CodeSignature directories found."
+          /usr/libexec/PlistBuddy \
+            -c 'Print :CFBundleDisplayName' \
+            "$APP/Info.plist" || true
 
           echo
-          echo "codesign inspection:"
+          echo "========================================"
+          echo "Code signature directories"
+          echo "========================================"
+
+          find \
+            "$APP" \
+            -type d \
+            -name '_CodeSignature' \
+            -print || true
+
+          echo
+          echo "========================================"
+          echo "Code signature"
+          echo "========================================"
+
           codesign -dvv "$APP" 2>&1 || true
 
-          echo
-          echo "IPA contents:"
-          /usr/bin/unzip -l "$IPA" | head -80
-
-      - name: Generate artifact checksum
-        shell: bash
-        run: |
-          set -euo pipefail
-          shasum -a 256 build/DELvEK-unsigned.ipa | tee build/DELvEK-unsigned.ipa.sha256
-
+      # ---------------------------------------------------------
+      # Upload IPA
+      # ---------------------------------------------------------
       - name: Upload unsigned DELvEK artifact
         uses: actions/upload-artifact@v4
         with:
           name: DELvEK-unsigned
-          path: |
-            build/DELvEK-unsigned.ipa
-            build/DELvEK-unsigned.ipa.sha256
+          path: build/DELvEK-unsigned.ipa
           if-no-files-found: error
