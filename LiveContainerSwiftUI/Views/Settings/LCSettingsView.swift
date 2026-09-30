@@ -325,6 +325,18 @@ struct LCSettingsView: View {
         NavigationView {
             Form {
                 Section {
+                    NavigationLink {
+                        DELvEKSigningView()
+                    } label: {
+                        Label("DELvEK Signing & Device", systemImage: "signature")
+                    }
+                } header: {
+                    Text("DELvEK")
+                } footer: {
+                    Text("Apple authentication, device pairing, UDID, development signing, trust, Local API, and StikJIT setup.")
+                }
+
+                Section {
                     HStack(spacing: 12) {
                         Image(systemName: "wallet.pass.fill")
                             .font(.system(size: 20))
@@ -638,12 +650,6 @@ struct LCSettingsView: View {
                 hydrateSubscriptionStateFromStorage()
 
                 // DELvEK has no FlekStore subscription/access bootstrap.
-                NavigationLink {
-                    DELvEKSigningView()
-                } label: {
-                    Label("DELvEK Signing & Device", systemImage: "signature")
-                }
-
                 subscriptionInitialized = true
             }
             .onChange(of: deviceUDID) { newValue in

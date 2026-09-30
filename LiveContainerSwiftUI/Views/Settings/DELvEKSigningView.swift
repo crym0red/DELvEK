@@ -271,21 +271,6 @@ struct DELvEKSigningView: View {
         }
     }
 
-    private var verificationSheet: some View {
-        Group {
-            if #available(iOS 16.0, *) {
-                NavigationStack {
-                    verificationForm
-                }
-                .presentationDetents([.medium, .large])
-            } else {
-                NavigationView {
-                    verificationForm
-                }
-            }
-        }
-    }
-
     private var verificationForm: some View {
         Form(content: {
             Section {
@@ -313,10 +298,30 @@ struct DELvEKSigningView: View {
                 Text("Verification")
             }
         })
-        .navigationTitle("Apple Verification")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { showVerification = false }
+    }
+
+    @ViewBuilder
+    private var verificationSheet: some View {
+        if #available(iOS 16.0, *) {
+            NavigationStack {
+                verificationForm
+                    .navigationTitle("Apple Verification")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showVerification = false }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+        } else {
+            NavigationView {
+                verificationForm
+                    .navigationTitle("Apple Verification")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showVerification = false }
+                        }
+                    }
             }
         }
     }

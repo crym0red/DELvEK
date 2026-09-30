@@ -1,18 +1,18 @@
-# DELvEK UI update
+# DELvEK Signing UI integration
 
-Updated:
-- `LiveContainerSwiftUI/Views/Settings/DELvEKSigningView.swift`
-
-This update is UI-only. It adds the complete front-end flow for:
-- Apple ID authentication
-- Apple verification method / verification-code screen
-- Device pairing
-- UDID display
-- Development certificate display/acquisition action
-- Team ID and expiration display
-- Provisioning/trust profile section
-- Local API / LocalDevVPN / backloop status
-- StikJIT and iOS 26.x RSD status
-- Nine-phase setup display
-
-The buttons intentionally do not fake successful authentication, pairing, certificate acquisition, or profile downloads. They expose placeholders for the backend plumbing that will be implemented next.
+- LiveContainerSwiftUI/Views/Settings/LCSettingsView.swift
+  - Adds a real visible “DELvEK Signing & Device” row inside the Settings Form.
+  - Removes the previous NavigationLink incorrectly created inside onAppear.
+- LiveContainerSwiftUI/Views/Settings/DELvEKSigningView.swift
+  - Apple ID authentication UI shell
+  - verification UI
+  - device pairing / UDID UI
+  - development certificate UI
+  - trust/provisioning UI
+  - Local API / backloop / StikJIT status
+  - nine-phase setup UI
+  - Xcode 26.2-compatible verification sheet
+- LiveContainerSwiftUI/Utilities/DELvEKSigningManager.swift
+- LiveContainerSwiftUI/Utilities/DELvEKSigningModels.swift
+- LiveContainerSwiftUI/Utilities/DELvEKPairingStore.swift
+- LiveContainerSwiftUI/Utilities/LocalJITService.swift
