@@ -9,6 +9,13 @@ on:
 permissions:
   contents: read
 
+env:
+  PROJECT: LiveContainer.xcodeproj
+  SCHEME: LiveContainer
+  CONFIGURATION: Release
+  DERIVED_DATA: ${{ github.workspace }}/build/DerivedData
+  SOURCE_PACKAGES: ${{ github.workspace }}/build/SourcePackages
+
 jobs:
   build-unsigned:
     runs-on: macos-latest
@@ -94,29 +101,91 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          echo "========================================"
+          echo "Cleaning Xcode / SwiftPM state"
+          echo "========================================"
+
           rm -rf "$GITHUB_WORKSPACE/build"
           rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
           rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
-          mkdir -p "$GITHUB_WORKSPACE/build"
+          rm -rf "$HOME/Library/Caches/com.apple.dt.Xcode"
+          rm -rf "$HOME/Library/org.swift.swiftpm"
+          rm -rf "$HOME/.swiftpm"
+
+          mkdir -p "$DERIVED_DATA"
+          mkdir -p "$SOURCE_PACKAGES"
 
       - name: Resolve Swift packages
         shell: bash
         run: |
           set -euo pipefail
+
+          DERIVED_DATA="$DERIVED_DATA"
+          CLONED_PACKAGES="$SOURCE_PACKAGES"
+
+          echo "========================================"
+          echo "Resolving Swift packages"
+          echo "========================================"
+
           xcodebuild \
             -resolvePackageDependencies \
-            -project "$GITHUB_WORKSPACE/LiveContainer.xcodeproj" \
-            -scheme "LiveContainer"
+            -project "$GITHUB_WORKSPACE/$PROJECT" \
+            -scheme "$SCHEME" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$CLONED_PACKAGES"
+
+      - name: Verify resolved Swift packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CHECKOUTS="$SOURCE_PACKAGES/checkouts"
+          WORKSPACE="$GITHUB_WORKSPACE/LiveContainer.xcodeproj/project.xcworkspace"
+
+          echo "========================================"
+          echo "Resolved Swift packages"
+          echo "========================================"
+
+          if [ ! -d "$CHECKOUTS" ]; then
+            echo "::error::SwiftPM checkout directory was not created."
+            exit 1
+          fi
+
+          find "$CHECKOUTS" -mindepth 1 -maxdepth 1 -type d -print | sort
+
+          echo
+          echo "Package resolution metadata:"
+          find "$GITHUB_WORKSPACE/build/SourcePackages" \
+            -maxdepth 3 \
+            -type f \
+            \( -name 'Package.resolved' -o -name 'workspace-state.json' \) \
+            -print \
+            2>/dev/null || true
+
+          echo
+          echo "Checking for duplicate swift-crypto identities..."
+          if grep -Rni \
+            "swift-crypto" \
+            "$GITHUB_WORKSPACE/$PROJECT" \
+            "$WORKSPACE" \
+            2>/dev/null; then
+            echo "swift-crypto references found above; continuing with the single Xcode-resolved graph."
+          else
+            echo "No direct swift-crypto references in the project files."
+          fi
 
       - name: Inspect build settings
         shell: bash
         run: |
           set -euo pipefail
           xcodebuild \
-            -project "$GITHUB_WORKSPACE/LiveContainer.xcodeproj" \
-            -scheme "LiveContainer" \
-            -configuration Release \
+            -project "$GITHUB_WORKSPACE/$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION" \
             -sdk iphoneos \
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             -showBuildSettings > build/build-settings.txt
 
           grep -E 'PRODUCT_NAME|FULL_PRODUCT_NAME|TARGET_BUILD_DIR|WRAPPER_NAME|PRODUCT_BUNDLE_IDENTIFIER' \
@@ -127,17 +196,19 @@ jobs:
         run: |
           set -o pipefail
 
-          DERIVED_DATA="$GITHUB_WORKSPACE/build/DerivedData"
           LOG="$GITHUB_WORKSPACE/build/xcodebuild.log"
 
-          rm -rf "$DERIVED_DATA"
+          # Keep the exact DerivedData directory populated by the package
+          # resolution step. Deleting it here invalidates the resolved SwiftPM
+          # graph and can trigger Xcode 26.2 checkout/container races.
 
           xcodebuild build \
-            -project "$GITHUB_WORKSPACE/LiveContainer.xcodeproj" \
-            -scheme "LiveContainer" \
-            -configuration Release \
+            -project "$GITHUB_WORKSPACE/$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION" \
             -destination "generic/platform=iOS" \
             -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
