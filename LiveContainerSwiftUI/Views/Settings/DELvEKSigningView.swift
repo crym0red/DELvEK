@@ -98,7 +98,17 @@ struct DELvEKSigningView: View {
                     .textContentType(.password)
 
                 Button {
-                    showVerification = true
+                    Task {
+                        do {
+                            try await manager.beginAppleSigning(appleID: appleID, password: applePassword)
+                            applePassword = ""
+                            backendAction = "Apple signing session prepared. Device CSR is stored in the Keychain; the Apple authentication/Developer Portal session is the next backend step."
+                            showBackendPlaceholder = true
+                        } catch {
+                            applePassword = ""
+                            errorMessage = error.localizedDescription
+                        }
+                    }
                 } label: {
                     Label("Sign In & Pair Device", systemImage: "person.badge.key.fill")
                         .frame(maxWidth: .infinity)
@@ -106,7 +116,7 @@ struct DELvEKSigningView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(appleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || applePassword.isEmpty)
 
-                Text("Credentials should be passed only to the Apple authentication implementation and never stored in DELvEK's ordinary app settings.")
+                Text(manager.appleSigning.csrPrepared ? "Apple ID stored securely. Device signing key + CSR prepared in Keychain." : "Credentials are used only for the Apple authentication flow and are never stored in DELvEK settings.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -135,7 +145,7 @@ struct DELvEKSigningView: View {
 
             HStack {
                 Button("Pair Device") {
-                    backendAction = "The native iOS 26.x RSD/CoreDevice pairing backend will be connected here."
+                    backendAction = manager.snapshot.pairing.isValid ? "Pairing record is loaded. RSD/CoreDevice transport can now use this native record." : "No pairing record is available yet. Import the native RSD/CoreDevice pairing record."
                     showBackendPlaceholder = true
                 }
                 .buttonStyle(.borderedProminent)
@@ -172,7 +182,7 @@ struct DELvEKSigningView: View {
             detailRow("Expires", formattedDate(manager.snapshot.certificate.expiration))
 
             Button {
-                backendAction = "Certificate acquisition will be connected after Apple authentication and device pairing are implemented."
+                backendAction = manager.appleSigning.csrPrepared ? "The device-local development CSR is prepared. The authenticated Apple Developer Portal step will issue the development certificate and profile." : "Sign in first so DELvEK can prepare the device signing request."
                 showBackendPlaceholder = true
             } label: {
                 Label("Obtain Development Certificate", systemImage: "checkmark.seal")
