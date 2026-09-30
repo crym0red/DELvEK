@@ -81,7 +81,7 @@ jobs:
       - name: Select Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "27.0"
+          xcode-version: "26.2.0"
 
       - name: Build pinned StikJIT XCFramework
         shell: bash
@@ -116,24 +116,56 @@ jobs:
           mkdir -p "$DERIVED_DATA"
           mkdir -p "$SOURCE_PACKAGES"
 
-      - name: Resolve Swift packages
+      - name: Resolve Swift packages from a clean graph
         shell: bash
         run: |
           set -euo pipefail
 
-          DERIVED_DATA="$DERIVED_DATA"
-          CLONED_PACKAGES="$SOURCE_PACKAGES"
+          WORKSPACE="$GITHUB_WORKSPACE/LiveContainer.xcodeproj/project.xcworkspace"
+          RESOLVED="$WORKSPACE/xcshareddata/swiftpm/Package.resolved"
+          BACKUP="$GITHUB_WORKSPACE/build/Package.resolved.ci-backup"
 
           echo "========================================"
-          echo "Resolving Swift packages"
+          echo "Preparing clean SwiftPM graph"
           echo "========================================"
+
+          # Xcode 26.2 can retain workspace-state references to a checkout that
+          # no longer exists. In that state -resolvePackageDependencies can fail
+          # before it recreates the missing checkout (for example TextTable).
+          # Keep the repository's lockfile intact, but resolve CI from a fresh
+          # graph. The original file is restored after resolution.
+          if [ -f "$RESOLVED" ]; then
+            cp "$RESOLVED" "$BACKUP"
+            rm -f "$RESOLVED"
+          fi
+
+          rm -rf "$SOURCE_PACKAGES"
+          rm -rf "$DERIVED_DATA"
+          mkdir -p "$SOURCE_PACKAGES"
+          mkdir -p "$DERIVED_DATA"
 
           xcodebuild \
             -resolvePackageDependencies \
             -project "$GITHUB_WORKSPACE/$PROJECT" \
             -scheme "$SCHEME" \
             -derivedDataPath "$DERIVED_DATA" \
-            -clonedSourcePackagesDirPath "$CLONED_PACKAGES"
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES"
+
+          # Confirm the checkout that Xcode will need actually exists before
+          # allowing the build to proceed.
+          if [ ! -d "$SOURCE_PACKAGES/checkouts" ]; then
+            echo "::error::SwiftPM did not create the checkout directory."
+            exit 1
+          fi
+
+          echo "Resolved checkouts:"
+          find "$SOURCE_PACKAGES/checkouts" -mindepth 1 -maxdepth 1 -type d -print | sort
+
+          # Restore the repository lockfile after resolution so the workspace
+          # is never left modified by CI.
+          if [ -f "$BACKUP" ]; then
+            cp "$BACKUP" "$RESOLVED"
+          fi
 
       - name: Verify resolved Swift packages
         shell: bash
