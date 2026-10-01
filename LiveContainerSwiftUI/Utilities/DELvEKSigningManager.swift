@@ -10,10 +10,12 @@ public final class DELvEKSigningManager: ObservableObject {
     @Published public private(set) var snapshot = DELvEKSigningSnapshot()
     @Published public private(set) var currentPhase: DELvEKSigningPhase = .pairing
     @Published public private(set) var message = ""
+    @Published public private(set) var appleSigning = DELvEKAppleSigningBackend.SessionState()
 
     private init() { refresh() }
 
     public func refresh() {
+        appleSigning = DELvEKAppleSigningBackend.shared.state
         let pairing = DELvEKPairingStore.shared.loadStatus()
         let certificate = Self.inspectDevelopmentCertificate()
         let provisioning = Self.inspectProvisioningProfiles(for: pairing.udid)
@@ -27,6 +29,17 @@ public final class DELvEKSigningManager: ObservableObject {
         )
         currentPhase = Self.calculatePhase(snapshot)
         message = Self.phaseMessage(currentPhase, snapshot: snapshot)
+    }
+
+
+    public func beginAppleSigning(appleID: String, password: String) async throws {
+        appleSigning = try await DELvEKAppleSigningBackend.shared.beginSession(appleID: appleID, password: password)
+        refresh()
+    }
+
+    public func signOutApple() {
+        DELvEKAppleSigningBackend.shared.signOut()
+        refresh()
     }
 
     public func importPairing(from url: URL) throws {

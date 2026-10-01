@@ -14,6 +14,7 @@ env:
   SCHEME: LiveContainer
   CONFIGURATION: Release
   DERIVED_DATA: ${{ github.workspace }}/build/DerivedData
+  SOURCE_PACKAGES: ${{ github.workspace }}/build/SourcePackages
 
 jobs:
   build-unsigned:
@@ -176,6 +177,9 @@ jobs:
 
       # =========================================================
       # VERIFY XCODE
+      #
+      # IMPORTANT:
+      # Do not pipe xcodebuild -version directly into grep -q.
       # =========================================================
       - name: Verify Xcode toolchain
         shell: bash
@@ -226,9 +230,13 @@ jobs:
           rm -rf "$GITHUB_WORKSPACE/build"
           rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
           rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
+          rm -rf "$HOME/.swiftpm"
+          rm -rf "$HOME/Library/org.swift.swiftpm"
 
           mkdir -p "$GITHUB_WORKSPACE/build"
           mkdir -p "$GITHUB_WORKSPACE/build/StikJIT"
+          mkdir -p "$DERIVED_DATA"
+          mkdir -p "$SOURCE_PACKAGES"
 
       # =========================================================
       # BUILD STIKJIT WITH XCODE 26.2
@@ -426,6 +434,10 @@ jobs:
 
       # =========================================================
       # VALIDATE LOCALIZATION
+      #
+      # Xcode 26.2 can crash internally while processing a malformed
+      # .strings file. Validate every Localizable.strings file before
+      # xcodebuild reaches the localization phase.
       # =========================================================
       - name: Validate localization files
         shell: bash
@@ -450,12 +462,21 @@ jobs:
             echo "$FILE"
             echo "----------------------------------------"
 
+            # ---------------------------------------------------
+            # UTF-8 validation
+            # ---------------------------------------------------
             if ! iconv -f UTF-8 -t UTF-8 "$FILE" >/dev/null 2>&1; then
               echo "::error file=$FILE::File is not valid UTF-8."
               FAILED=1
               continue
             fi
 
+            # ---------------------------------------------------
+            # Normalize CRLF/CR line endings.
+            #
+            # Xcode's localization parser is sensitive to malformed
+            # line endings in some projects.
+            # ---------------------------------------------------
             TMP="${FILE}.normalized"
 
             if ! sed 's/\r$//' "$FILE" > "$TMP"; then
@@ -473,6 +494,9 @@ jobs:
               rm -f "$TMP"
             fi
 
+            # ---------------------------------------------------
+            # Property-list / .strings syntax validation
+            # ---------------------------------------------------
             if ! plutil -lint "$FILE"; then
               echo "::error file=$FILE::Invalid .strings syntax."
               FAILED=1
@@ -538,7 +562,9 @@ jobs:
           xcodebuild \
             -resolvePackageDependencies \
             -project "$GITHUB_WORKSPACE/$PROJECT" \
-            -scheme "$SCHEME"
+            -scheme "$SCHEME" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES"
 
       # =========================================================
       # BUILD SETTINGS
@@ -553,6 +579,8 @@ jobs:
             -scheme "$SCHEME" \
             -configuration "$CONFIGURATION" \
             -sdk iphoneos \
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             -showBuildSettings \
             > "$GITHUB_WORKSPACE/build/build-settings.txt"
 
@@ -572,8 +600,8 @@ jobs:
           DERIVED_DATA="$GITHUB_WORKSPACE/build/DerivedData"
           LOG="$GITHUB_WORKSPACE/build/xcodebuild.log"
 
-          rm -rf "$DERIVED_DATA"
           mkdir -p "$DERIVED_DATA"
+          mkdir -p "$SOURCE_PACKAGES"
 
           xcodebuild build \
             -project "$GITHUB_WORKSPACE/$PROJECT" \
@@ -581,6 +609,7 @@ jobs:
             -configuration "$CONFIGURATION" \
             -destination "generic/platform=iOS" \
             -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -646,6 +675,12 @@ jobs:
 
       # =========================================================
       # REMOVE NESTED SIGNATURES
+      #
+      # Xcode may copy pre-signed third-party frameworks into the
+      # unsigned application even with CODE_SIGNING_ALLOWED=NO.
+      #
+      # Remove those signatures so the unsigned artifact is actually
+      # unsigned and can be signed cleanly later.
       # =========================================================
       - name: Strip nested code signatures
         shell: bash
@@ -704,8 +739,26 @@ jobs:
               rm -f "$PROFILE"
             done <<< "$PROFILES"
           else
-            echo "No embedded provisioning profiles found."
+            echo "No nested provisioning profiles found."
           fi
+
+          echo
+          echo "Remaining signature directories:"
+
+          find "$APP" \
+            -type d \
+            -name '_CodeSignature' \
+            -print \
+            || true
+
+          echo
+          echo "Remaining provisioning profiles:"
+
+          find "$APP" \
+            -type f \
+            -name 'embedded.mobileprovision' \
+            -print \
+            || true
 
       # =========================================================
       # PACKAGE IPA
