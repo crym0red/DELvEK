@@ -1,18 +1,14 @@
-# DELvEK backend foundation
+# DELvEK SwiftPM build fix
 
-This patch removes the fake certificate/session state from the button path and introduces the real Apple-signing backend boundary:
+This archive updates the GitHub Actions build workflow to prevent the Xcode/SwiftPM checkout-container failures seen during package resolution.
 
-- adds the SideSign Swift package dependency (Apple GSA, developer portal, certificate/profile and code-signing primitives);
-- adds secure Keychain state for the Apple ID, CSR and device private key;
-- generates a real 2048-bit development CSR/private key through SideSign's `CertificateRequest`;
-- keeps the Apple password ephemeral and clears it from the UI after the operation;
-- wires the DELvEK Signing UI to the backend manager instead of the old placeholder action;
-- preserves the existing iOS 26.x RSD/CoreDevice pairing record rather than converting it to legacy data.
+Changes:
+- Keeps DerivedData and SwiftPM source checkouts in separate locations.
+- Uses `$RUNNER_TEMP/DELvEK-SPM/SourcePackages` for SwiftPM checkouts instead of placing checkouts inside the repository's `build` directory.
+- Passes the same `-clonedSourcePackagesDirPath` to package resolution, build-settings inspection, and the final build.
+- Keeps the resolved DerivedData directory intact between resolution and compilation.
+- Disables automatic package re-resolution during the final build so Xcode uses the graph that was explicitly resolved.
+- Moves the StikJIT build after the clean-build step so the clean step cannot delete generated StikJIT output.
 
-Important: this is the first real backend layer, not a claim that Apple authentication/certificate issuance has been device-verified. The next build is intentionally the validation point for the SideSign package API on Xcode 26.2; the authenticated GSA/Developer Portal calls and on-device RSD pairing transport still need to be connected after the package/API compile is confirmed.
-
-## SwiftPM/Xcode 26.2 resolution fix
-- uses one persistent `SourcePackages` directory for resolve, build settings, and build;
-- removes the destructive DerivedData cleanup between package resolution and compilation;
-- clears user SwiftPM caches before resolution;
-- applies the same package-path arguments to both main and build workflows.
+Primary affected file:
+- `.github/workflows/build.yml`
